@@ -61,7 +61,7 @@
   --edge-default:     #64748b;
 
   /* Layout Dimensions */
-  --navbar-h:         50px;
+  --navbar-h:         54px;
   --sidebar-w:        280px;
   --detail-w:         340px;
   --radius-xs:        3px;
@@ -166,19 +166,24 @@ html, body {
   left: 0;
   right: 0;
   z-index: 100;
+  min-height: var(--navbar-h);
   height: var(--navbar-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 12px 0 16px;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
+  gap: 12px;
+  overflow: hidden;
 }
 
 .navbar-brand {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;   /* never compress the CRIMENET title */
+  min-width: 0;
 }
 
 .brand-icon {
@@ -237,6 +242,7 @@ html, body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 3px 12px;
+  flex-shrink: 0;   /* keep metrics pill intact */
 }
 
 .stat-pill {
@@ -266,11 +272,40 @@ html, body {
   background: var(--border);
 }
 
-/* Navbar Actions */
+/* Navbar Actions — scrollable toolbar when buttons overflow */
 .navbar-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  /* let it shrink but not past 0; overflow handled by inner scroll container */
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Inner scrollable wrapper for the action buttons */
+.navbar-actions-scroll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 2px;   /* a little breathing room so focus rings aren't clipped */
+  /* hide scrollbar track but keep it functional */
+  scrollbar-width: thin;
+  scrollbar-color: #25334d transparent;
+}
+.navbar-actions-scroll::-webkit-scrollbar {
+  height: 3px;
+}
+.navbar-actions-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.navbar-actions-scroll::-webkit-scrollbar-thumb {
+  background: #25334d;
+  border-radius: 4px;
+}
+.navbar-actions-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
 
 /* ── Standard Workstation Buttons ─────────────────────────────── */

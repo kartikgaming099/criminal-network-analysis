@@ -66,86 +66,89 @@
 
     <!-- Operational Actions -->
     <div class="navbar-actions">
-      <button class="btn btn-poi" id="btn-poi" style="display:none;" title="Open Persons of Interest Registry">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-        </svg>
-        <span>POI Registry</span>
-        <span class="poi-count" id="poi-count">0</span>
-      </button>
+      <!-- Scrollable button rail — scrolls horizontally when space is tight -->
+      <div class="navbar-actions-scroll">
+        <button class="btn btn-poi" id="btn-poi" style="display:none;" title="Open Persons of Interest Registry">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>POI Registry</span>
+          <span class="poi-count" id="poi-count">0</span>
+        </button>
 
-      <button class="btn btn-summary" id="btn-summary" style="display:none;" title="Generate Intelligence Case Dossier">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-        </svg>
-        <span>Case Briefing</span>
-      </button>
+        <button class="btn btn-summary" id="btn-summary" style="display:none;" title="Generate Intelligence Case Dossier">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <span>Case Briefing</span>
+        </button>
 
-      <button class="btn btn-ghost" id="btn-anomalies" style="display:none;" title="Detect Cross-Network Irregularities">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-          <line x1="12" y1="9" x2="12" y2="13"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        <span>Pattern Anomalies</span>
-      </button>
+        <button class="btn btn-ghost" id="btn-anomalies" style="display:none;" title="Detect Cross-Network Irregularities">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>Pattern Anomalies</span>
+        </button>
 
-      <button class="btn btn-primary" id="btn-path-tracer" style="display:none;background:linear-gradient(135deg, rgba(6,182,212,0.2) 0%, rgba(14,116,144,0.3) 100%);border-color:rgba(6,182,212,0.4);color:#38bdf8;" title="Intermediary Link &amp; Path Conduit Tracer (T)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="6" cy="6" r="3"/>
-          <circle cx="18" cy="18" r="3"/>
-          <path d="M6 9v3a3 3 0 0 0 3 3h6"/>
-          <polyline points="15 12 18 15 15 18"/>
-        </svg>
-        <span>Path Tracer</span>
-      </button>
+        <button class="btn btn-primary" id="btn-path-tracer" style="display:none;background:linear-gradient(135deg, rgba(6,182,212,0.2) 0%, rgba(14,116,144,0.3) 100%);border-color:rgba(6,182,212,0.4);color:#38bdf8;" title="Intermediary Link &amp; Path Conduit Tracer (T)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="6" r="3"/>
+            <circle cx="18" cy="18" r="3"/>
+            <path d="M6 9v3a3 3 0 0 0 3 3h6"/>
+            <polyline points="15 12 18 15 15 18"/>
+          </svg>
+          <span>Path Tracer</span>
+        </button>
 
-      <button class="btn btn-ghost" id="btn-timeline-toggle" style="display:none;" title="Toggle Temporal Evidence Flow Timeline (L)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <polyline points="12 6 12 12 16 14"/>
-        </svg>
-        <span>Timeline Flow</span>
-      </button>
+        <button class="btn btn-ghost" id="btn-timeline-toggle" style="display:none;" title="Toggle Temporal Evidence Flow Timeline (L)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Timeline Flow</span>
+        </button>
 
-      <button class="btn btn-ghost" id="btn-vulnerability" style="display:none;color:#f59e0b;border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.1);" title="Key Players &amp; Syndicate Vulnerability Matrix (K)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
-          <path d="M2 12h20"/>
-        </svg>
-        <span>Key Players &amp; Matrix</span>
-      </button>
+        <button class="btn btn-ghost" id="btn-vulnerability" style="display:none;color:#f59e0b;border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.1);" title="Key Players &amp; Syndicate Vulnerability Matrix (K)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+            <path d="M2 12h20"/>
+          </svg>
+          <span>Key Players &amp; Matrix</span>
+        </button>
 
-      <button class="btn btn-criminals" id="btn-criminals-output" style="display:none;" title="View Criminals-Only Network Output">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        </svg>
-        <span>Criminals Output</span>
-      </button>
+        <button class="btn btn-criminals" id="btn-criminals-output" style="display:none;" title="View Criminals-Only Network Output">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+          <span>Criminals Output</span>
+        </button>
 
-      <button class="btn btn-ghost" id="btn-reset" style="display:none;" title="Clear Active Investigation Canvas">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-          <path d="M3 3v5h5"/>
-        </svg>
-        <span>Clear Canvas</span>
-      </button>
+        <button class="btn btn-ghost" id="btn-reset" style="display:none;" title="Clear Active Investigation Canvas">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+          </svg>
+          <span>Clear Canvas</span>
+        </button>
 
-      <button class="btn btn-ghost" id="btn-shortcuts" title="Operational Keyboard Shortcuts (?)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        <span>Keys (?)</span>
-      </button>
+        <button class="btn btn-ghost" id="btn-shortcuts" title="Operational Keyboard Shortcuts (?)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>Keys (?)</span>
+        </button>
+      </div><!-- /.navbar-actions-scroll -->
     </div>
   </header>
 
