@@ -487,6 +487,30 @@ function renderNodeDetail(node, connEdges, nodeMap) {
   edgeTypes.forEach(t => h += badge(t, tagCls(t)));
   h += `</div>`;
 
+  // Quick Action Bar
+  h += `<div class="detail-actions-bar">
+    <button class="btn btn-sm btn-ghost" onclick="focusNodeOnCanvas('${escapeHtml(node.id)}')" title="Center &amp; highlight on canvas">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      <span>Focus</span>
+    </button>
+    <button class="btn btn-sm btn-ghost" onclick="copyTextToClipboard('${escapeHtml(node.id)}', 'Entity ID copied to clipboard')" title="Copy Subject ID">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      <span>Copy ID</span>
+    </button>
+    <button class="btn btn-sm btn-ghost" onclick="copyNodeDossier('${escapeHtml(node.id)}')" title="Copy full investigative summary">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+      </svg>
+      <span>Copy Brief</span>
+    </button>
+  </div>`;
+
   // Risk Assessment
   h += `<div class="detail-section">
     <div class="detail-section-title">THREAT &amp; INVOLVEMENT MATRIX</div>
@@ -529,7 +553,7 @@ function renderNodeDetail(node, connEdges, nodeMap) {
     h += `</div>`;
   }
 
-  // Correlated Connections
+  // Correlated Connections (Interactive Hop)
   if (connIds.length) {
     h += `<div class="detail-section"><div class="detail-section-title">RECORDED AFFILIATIONS (${connIds.length})</div>`;
     connIds.slice(0, 10).forEach(pid => {
@@ -537,9 +561,15 @@ function renderNodeDetail(node, connEdges, nodeMap) {
       const edge = connEdges.find(e => e.source === pid || e.target === pid);
       const amt  = edge?.total_amount ? `<span style="color:#10b981;font-family:monospace;font-size:11px;"> ₹${Math.round(edge.total_amount).toLocaleString('en-IN')}</span>` : '';
       const cnt  = edge?.txn_count    ? `<span style="font-size:10px;color:#64748b;"> (${edge.txn_count} txns)</span>` : '';
-      h += `<div class="detail-row" style="align-items:center;">
-        <span class="detail-key" style="${p.is_criminal ? 'color:#f87171;' : ''}">${p.is_criminal ? '[POI] ' : ''}${pid}</span>
-        <span>${badge(edge?.type || 'link', tagCls(edge?.type))}${amt}${cnt}</span>
+      h += `<div class="detail-row affiliation-row" onclick="focusNodeOnCanvas('${escapeHtml(pid)}')" title="Hop to ${escapeHtml(p.label || pid)} on canvas">
+        <div style="display:flex;align-items:center;gap:6px;min-width:0;flex:1;">
+          <div style="width:6px;height:6px;border-radius:50%;background:${nodeStroke(p)};flex-shrink:0;"></div>
+          <span class="detail-key" style="${p.is_criminal ? 'color:#f87171;' : ''}">${p.is_criminal ? '[POI] ' : ''}${escapeHtml(p.label || pid)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+          ${badge(edge?.type || 'link', tagCls(edge?.type))}${amt}${cnt}
+          <span class="affil-arrow">→</span>
+        </div>
       </div>`;
     });
     if (connIds.length > 10) h += `<div style="font-size:11px;color:#64748b;margin-top:3px;font-family:var(--font-mono);">+${connIds.length - 10} additional links</div>`;
@@ -1291,6 +1321,64 @@ function initKeyboardNav() {
       $('btn-summary')?.click();
     }
   });
+}
+
+// ── Clipboard & Dossier Sharing ────────────────────────────────────────────────
+function copyTextToClipboard(text, successMsg = 'Copied to clipboard') {
+  if (!text) return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(String(text)).then(() => {
+      showBanner(successMsg, 'success');
+    }).catch(() => fallbackCopy(text, successMsg));
+  } else {
+    fallbackCopy(text, successMsg);
+  }
+}
+
+function fallbackCopy(text, successMsg) {
+  const ta = document.createElement('textarea');
+  ta.value = String(text);
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    showBanner(successMsg, 'success');
+  } catch (e) {
+    showBanner('Clipboard copy failed.', 'danger');
+  }
+  document.body.removeChild(ta);
+}
+
+function copyNodeDossier(nodeId) {
+  if (!graphData || !activeNodeMap || !activeNodeMap[nodeId]) return;
+  const node = activeNodeMap[nodeId];
+  const connEdges = activeEdges?.filter(e => e.source === nodeId || e.target === nodeId) || [];
+  const risk = calcRisk(node, connEdges);
+  const d = node.details || {};
+
+  const lines = [
+    `CRIMENET FORENSIC INTELLIGENCE BRIEF // REF: SIH-26189`,
+    `======================================================`,
+    `ENTITY NAME:      ${node.label || node.id}`,
+    `ENTITY ID:        ${node.id}`,
+    `CLASSIFICATION:   ${node.is_criminal ? 'PRIORITY PERSON OF INTEREST (POI)' : 'CIVILIAN / ASSOCIATE'}`,
+    `THREAT RATING:    ${risk.level} (${risk.score}/100)`,
+    `SYNDICATE SUBNET: Syndicate #${node.cluster}`,
+    `DIRECT AFFILIATIONS: ${node.degree || connEdges.length}`,
+  ];
+  if (d.account_no) lines.push(`BANK ACCOUNT:     ${d.account_no} (${d.bank || 'Unknown Bank'})`);
+  if (d.Mobile_Number) lines.push(`MOBILE CONTACT:   ${d.Mobile_Number}`);
+  if (risk.factors?.length) {
+    lines.push(`RISK INDICATORS:`);
+    risk.factors.forEach(f => lines.push(`  - ${f}`));
+  }
+  if (node.sources?.length) {
+    lines.push(`EVIDENCE SOURCES: ${node.sources.join(', ')}`);
+  }
+
+  copyTextToClipboard(lines.join('\n'), `Dossier brief copied for ${node.label || node.id}`);
 }
 
 // ── Utility Helpers ────────────────────────────────────────────────────────────

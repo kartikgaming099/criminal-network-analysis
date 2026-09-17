@@ -1664,4 +1664,46 @@ html, body {
   letter-spacing: 0.04em;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   Detail Inspector Action Bar & Affiliation Hop
+   ═══════════════════════════════════════════════════════════════════ */
+.detail-actions-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.btn-sm {
+  padding: 5px 9px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--radius-xs);
+  flex: 1;
+  justify-content: center;
+}
+.affiliation-row {
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  margin-bottom: 3px;
+  transition: background 0.15s, border-color 0.15s;
+  border: 1px solid transparent;
+}
+.affiliation-row:hover {
+  background: rgba(56, 189, 248, 0.1);
+  border-color: rgba(56, 189, 248, 0.25);
+}
+.affil-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  transition: transform 0.15s, color 0.15s;
+}
+.affiliation-row:hover .affil-arrow {
+  color: var(--accent);
+  transform: translateX(2px);
+}
+
+
 
