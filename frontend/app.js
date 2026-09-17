@@ -48,6 +48,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initUpload();
   initButtons();
   initNodeSearch();
+  initShortcutsModal();
+  initKeyboardNav();
   loadDatasetList();
 });
 
@@ -1160,17 +1162,6 @@ function initNodeSearch() {
       closeDropdown();
     }
   });
-
-  // Global hotkey "/" to focus search
-  document.addEventListener('keydown', e => {
-    if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
-      if (graphData) {
-        e.preventDefault();
-        input.focus();
-        input.select();
-      }
-    }
-  });
 }
 
 function focusNodeOnCanvas(nodeId) {
@@ -1220,6 +1211,86 @@ function focusNodeOnCanvas(nodeId) {
       .attr('opacity', 0)
       .remove();
   }
+}
+
+// ── Operational Keyboard Shortcuts & Modal ─────────────────────────────────────
+function initShortcutsModal() {
+  const modal = $('shortcuts-modal-overlay');
+  const openBtn = $('btn-shortcuts');
+  const closeBtn = $('shortcuts-modal-close');
+
+  openBtn?.addEventListener('click', () => modal?.classList.remove('hidden'));
+  closeBtn?.addEventListener('click', () => modal?.classList.add('hidden'));
+  modal?.addEventListener('click', e => {
+    if (e.target === modal) modal.classList.add('hidden');
+  });
+}
+
+function initKeyboardNav() {
+  document.addEventListener('keydown', e => {
+    const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+
+    if (e.key === 'Escape') {
+      if (isInput) {
+        document.activeElement.blur();
+      }
+      $('shortcuts-modal-overlay')?.classList.add('hidden');
+      el.aiModal?.classList.add('hidden');
+      el.poiOverlay?.classList.add('hidden');
+      closeCriminalsOutput();
+      closeDetailPanel();
+      clearHighlights();
+      return;
+    }
+
+    if (isInput) return;
+
+    if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+      e.preventDefault();
+      const modal = $('shortcuts-modal-overlay');
+      if (modal) {
+        modal.classList.toggle('hidden');
+      }
+      return;
+    }
+
+    if (e.key === '/') {
+      const input = $('node-search-input');
+      if (input && graphData) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+      return;
+    }
+
+    if (!graphData) return;
+
+    if (e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      $('zoom-fit')?.click();
+    } else if (e.key === '+' || e.key === '=') {
+      e.preventDefault();
+      $('zoom-in')?.click();
+    } else if (e.key === '-' || e.key === '_') {
+      e.preventDefault();
+      $('zoom-out')?.click();
+    } else if (e.key.toLowerCase() === 'r') {
+      e.preventDefault();
+      $('zoom-fit')?.click();
+    } else if (e.key.toLowerCase() === 'c') {
+      e.preventDefault();
+      const ov = $('criminals-output-overlay');
+      if (ov && !ov.classList.contains('hidden')) closeCriminalsOutput();
+      else openCriminalsOutput();
+    } else if (e.key.toLowerCase() === 'p') {
+      e.preventDefault();
+      $('btn-poi')?.click();
+    } else if (e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      $('btn-summary')?.click();
+    }
+  });
 }
 
 // ── Utility Helpers ────────────────────────────────────────────────────────────

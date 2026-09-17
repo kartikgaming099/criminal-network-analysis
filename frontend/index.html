@@ -110,6 +110,15 @@
         </svg>
         <span>Clear Canvas</span>
       </button>
+
+      <button class="btn btn-ghost" id="btn-shortcuts" title="Operational Keyboard Shortcuts (?)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span>Keys (?)</span>
+      </button>
     </div>
   </header>
 
@@ -363,6 +372,67 @@
         <div class="ai-thinking">
           <div class="spinner"></div>
           <span>Compiling Forensic Intelligence Synthesis…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Keyboard Shortcuts Guide Modal -->
+  <div class="modal-overlay hidden" id="shortcuts-modal-overlay">
+    <div class="ai-modal" style="max-width: 480px;">
+      <div class="ai-modal-header">
+        <div class="ai-badge">
+          <span class="status-indicator" style="background:#38bdf8;box-shadow:0 0 0 3px rgba(56,189,248,0.2);"></span>
+          <div>
+            <div class="dossier-heading-text">OPERATIONAL KEYBOARD SHORTCUTS</div>
+            <span class="dossier-sub-text">TACTICAL WORKBENCH NAVIGATION REFERENCE</span>
+          </div>
+        </div>
+        <button class="detail-close" id="shortcuts-modal-close" title="Close Shortcuts">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="ai-modal-body" style="padding: 16px 18px;">
+        <div class="shortcuts-list">
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Focus entity spotlight search</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">/</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Fit network to viewport</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">F</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Zoom in / Zoom out canvas</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">+</kbd><kbd class="kbd-key">-</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Reset camera to center</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">R</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Toggle Criminals Network Output</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">C</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Toggle Persons of Interest Registry</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">P</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Synthesize Case Briefing Dossier</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">S</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Close open modal / Clear selection</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">Esc</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Toggle this Shortcuts guide</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">?</kbd></div>
+          </div>
         </div>
       </div>
     </div>
