@@ -567,10 +567,40 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 4px 7px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  border: 1px solid transparent;
+}
+.legend-item:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.legend-item.active {
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+.legend-item.active span {
+  color: #f8fafc;
+  font-weight: 600;
 }
 .legend-item span {
   font-size: 11px;
   color: var(--text-secondary);
+}
+.legend-count {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: auto;
+}
+.legend-item.active .legend-count {
+  color: var(--accent);
+  background: rgba(56, 189, 248, 0.2);
 }
 
 .legend-dot {

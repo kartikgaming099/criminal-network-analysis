@@ -217,14 +217,14 @@
         <div class="section-header">
           <span class="section-title">TAXONOMY &amp; LEGEND</span>
         </div>
-        <div class="legend-grid">
-          <div class="legend-item"><div class="legend-dot criminal"></div><span>Priority POI</span></div>
-          <div class="legend-item"><div class="legend-dot civilian"></div><span>Civilian / Associate</span></div>
-          <div class="legend-item"><div class="legend-dot stolen"></div><span>Stolen Asset Link</span></div>
-          <div class="legend-item"><div class="legend-line phone"></div><span>Telephony Call</span></div>
-          <div class="legend-item"><div class="legend-line financial"></div><span>Financial Wire</span></div>
-          <div class="legend-item"><div class="legend-line vehicle"></div><span>Vehicle Transfer</span></div>
-          <div class="legend-item"><div class="legend-line suspicious"></div><span>Flagged Suspicious</span></div>
+        <div class="legend-grid" id="legend-grid">
+          <div class="legend-item" data-filter-type="criminal" title="Isolate Priority POIs"><div class="legend-dot criminal"></div><span>Priority POI</span><span class="legend-count" id="count-poi">0</span></div>
+          <div class="legend-item" data-filter-type="civilian" title="Isolate Civilians / Associates"><div class="legend-dot civilian"></div><span>Civilian / Associate</span><span class="legend-count" id="count-civ">0</span></div>
+          <div class="legend-item" data-filter-type="stolen" title="Isolate Stolen Asset Links"><div class="legend-dot stolen"></div><span>Stolen Asset Link</span><span class="legend-count" id="count-stolen">0</span></div>
+          <div class="legend-item" data-filter-type="phone" title="Isolate Telephony Calls"><div class="legend-line phone"></div><span>Telephony Call</span><span class="legend-count" id="count-phone">0</span></div>
+          <div class="legend-item" data-filter-type="financial" title="Isolate Financial Wires"><div class="legend-line financial"></div><span>Financial Wire</span><span class="legend-count" id="count-financial">0</span></div>
+          <div class="legend-item" data-filter-type="vehicle" title="Isolate Vehicle Transfers"><div class="legend-line vehicle"></div><span>Vehicle Transfer</span><span class="legend-count" id="count-vehicle">0</span></div>
+          <div class="legend-item" data-filter-type="suspicious" title="Isolate Flagged Suspicious Links"><div class="legend-line suspicious"></div><span>Flagged Suspicious</span><span class="legend-count" id="count-suspicious">0</span></div>
         </div>
       </section>
 

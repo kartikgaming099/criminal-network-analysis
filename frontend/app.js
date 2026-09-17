@@ -410,8 +410,9 @@ function renderGraph(data, filename) {
 
   svgSel.on('click', () => { clearHighlights(); closeDetailPanel(); });
 
-  // Update POI badge count
+  // Update POI badge count & taxonomy counts
   if (typeof updatePOICount === 'function') updatePOICount();
+  updateLegendCounts(data);
 
   // Reset spotlight search for newly loaded graph
   $('canvas-search-wrap')?.classList.remove('hidden');
@@ -469,6 +470,7 @@ function clearHighlights() {
   d3.selectAll('.node-g').attr('opacity', null);
   d3.selectAll('.node-label').classed('selected', false);
   d3.selectAll('.cluster-group').attr('opacity', null);
+  document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('active'));
   hideBanner();
 }
 
@@ -1064,6 +1066,8 @@ function initButtons() {
   $('criminals-output-overlay')?.addEventListener('click', e => {
     if (e.target === $('criminals-output-overlay')) closeCriminalsOutput();
   });
+
+  initLegendFilters();
 }
 
 // ── Correlation Display Filters ────────────────────────────────────────────────
@@ -1084,6 +1088,107 @@ function initButtons() {
     });
   });
 });
+
+// ── Interactive Taxonomy Legend & Isolation ────────────────────────────────────
+function updateLegendCounts(data) {
+  if (!data) return;
+  const nodes = data.nodes || [];
+  const edges = data.edges || [];
+
+  const poiCount    = nodes.filter(n => n.is_criminal).length;
+  const civCount    = nodes.filter(n => !n.is_criminal).length;
+  const stolenCount = nodes.filter(n => n.has_stolen_vehicle).length;
+  const phoneCount  = edges.filter(e => e.type === 'phone call').length;
+  const finCount    = edges.filter(e => e.type === 'financial transaction' || e.type === 'shared bank account').length;
+  const vehCount    = edges.filter(e => e.type === 'vehicle transfer').length;
+  const suspCount   = edges.filter(e => e.suspicious).length;
+
+  if ($('count-poi'))        $('count-poi').textContent = poiCount;
+  if ($('count-civ'))        $('count-civ').textContent = civCount;
+  if ($('count-stolen'))     $('count-stolen').textContent = stolenCount;
+  if ($('count-phone'))      $('count-phone').textContent = phoneCount;
+  if ($('count-financial'))  $('count-financial').textContent = finCount;
+  if ($('count-vehicle'))    $('count-vehicle').textContent = vehCount;
+  if ($('count-suspicious')) $('count-suspicious').textContent = suspCount;
+}
+
+function initLegendFilters() {
+  document.querySelectorAll('.legend-item').forEach(item => {
+    item.addEventListener('click', () => {
+      if (!graphData || !activeNodeMap || !activeEdges) return;
+      const type = item.getAttribute('data-filter-type');
+      if (!type) return;
+
+      const wasActive = item.classList.contains('active');
+      document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('active'));
+
+      if (wasActive) {
+        clearHighlights();
+        return;
+      }
+
+      item.classList.add('active');
+      activeNodeId = null;
+      activeEdge = null;
+      isolatedClusterId = null;
+      d3.selectAll('.cluster-group').attr('opacity', null);
+
+      if (type === 'criminal') {
+        d3.selectAll('.node-g').attr('opacity', d => d.is_criminal ? 1 : 0.08);
+        d3.selectAll('.edge-line').attr('opacity', d =>
+          (activeNodeMap[d.source]?.is_criminal || activeNodeMap[d.target]?.is_criminal) ? 1 : 0.03
+        );
+        showBanner('ISOLATING PRIORITY PERSONS OF INTEREST (POI) · Click legend item again to reset', 'info');
+      } else if (type === 'civilian') {
+        d3.selectAll('.node-g').attr('opacity', d => !d.is_criminal ? 1 : 0.08);
+        d3.selectAll('.edge-line').attr('opacity', d =>
+          (!activeNodeMap[d.source]?.is_criminal && !activeNodeMap[d.target]?.is_criminal) ? 1 : 0.03
+        );
+        showBanner('ISOLATING CIVILIAN / ASSOCIATE ENTITIES · Click legend item again to reset', 'info');
+      } else if (type === 'stolen') {
+        d3.selectAll('.node-g').attr('opacity', d => d.has_stolen_vehicle ? 1 : 0.08);
+        d3.selectAll('.edge-line').attr('opacity', d =>
+          (activeNodeMap[d.source]?.has_stolen_vehicle || activeNodeMap[d.target]?.has_stolen_vehicle) ? 1 : 0.03
+        );
+        showBanner('ISOLATING ENTITIES LINKED TO STOLEN MOTOR ASSETS · Click legend item again to reset', 'info');
+      } else if (type === 'phone') {
+        const phoneNodes = new Set();
+        activeEdges.filter(e => e.type === 'phone call').forEach(e => {
+          phoneNodes.add(e.source); phoneNodes.add(e.target);
+        });
+        d3.selectAll('.edge-line').attr('opacity', d => d.type === 'phone call' ? 1 : 0.03);
+        d3.selectAll('.node-g').attr('opacity', d => phoneNodes.has(d.id) ? 1 : 0.08);
+        showBanner('ISOLATING TELEPHONY CALL NETWORKS · Click legend item again to reset', 'info');
+      } else if (type === 'financial') {
+        const finNodes = new Set();
+        activeEdges.filter(e => e.type === 'financial transaction' || e.type === 'shared bank account').forEach(e => {
+          finNodes.add(e.source); finNodes.add(e.target);
+        });
+        d3.selectAll('.edge-line').attr('opacity', d =>
+          (d.type === 'financial transaction' || d.type === 'shared bank account') ? 1 : 0.03
+        );
+        d3.selectAll('.node-g').attr('opacity', d => finNodes.has(d.id) ? 1 : 0.08);
+        showBanner('ISOLATING CAPITAL & FINANCIAL WIRE PATHS · Click legend item again to reset', 'info');
+      } else if (type === 'vehicle') {
+        const vehNodes = new Set();
+        activeEdges.filter(e => e.type === 'vehicle transfer').forEach(e => {
+          vehNodes.add(e.source); vehNodes.add(e.target);
+        });
+        d3.selectAll('.edge-line').attr('opacity', d => d.type === 'vehicle transfer' ? 1 : 0.03);
+        d3.selectAll('.node-g').attr('opacity', d => vehNodes.has(d.id) ? 1 : 0.08);
+        showBanner('ISOLATING VEHICLE LOGISTICS & TRANSFERS · Click legend item again to reset', 'info');
+      } else if (type === 'suspicious') {
+        const suspNodes = new Set();
+        activeEdges.filter(e => e.suspicious).forEach(e => {
+          suspNodes.add(e.source); suspNodes.add(e.target);
+        });
+        d3.selectAll('.edge-line').attr('opacity', d => d.suspicious ? 1 : 0.03);
+        d3.selectAll('.node-g').attr('opacity', d => suspNodes.has(d.id) ? 1 : 0.08);
+        showBanner('ISOLATING FLAGGED SUSPICIOUS RELATIONSHIPS · Click legend item again to reset', 'danger');
+      }
+    });
+  });
+}
 
 // ── Spotlight Entity Search & Focus ───────────────────────────────────────────
 function escapeHtml(str) {
