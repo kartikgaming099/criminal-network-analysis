@@ -885,16 +885,36 @@ function hideTooltip() {
 // ── Zoom Controls ──────────────────────────────────────────────────────────────
 $('zoom-in').addEventListener('click',  () => svgSel?.transition().duration(250).call(zoomBehavior.scaleBy, 1.4));
 $('zoom-out').addEventListener('click', () => svgSel?.transition().duration(250).call(zoomBehavior.scaleBy, 0.7));
-$('zoom-fit').addEventListener('click', () => {
+$('zoom-fit').addEventListener('click', () => fitGraphToViewport());
+
+function fitGraphToViewport(animate = true) {
   if (!svgSel || !graphData) return;
-  const W = $('canvas-wrapper').clientWidth;
-  const H = $('canvas-wrapper').clientHeight;
-  const s = Math.min((W * 0.9) / 3000, (H * 0.9) / 3000);
-  svgSel.transition().duration(350).call(
-    zoomBehavior.transform,
-    d3.zoomIdentity.translate(W / 2, H / 2).scale(s).translate(-1500, -1500)
-  );
-});
+  const wrapper = $('canvas-wrapper');
+  const W = wrapper.clientWidth  || 900;
+  const H = wrapper.clientHeight || 700;
+
+  // Compute actual node extent instead of hardcoded 1500/1500
+  const nodes = graphData.nodes;
+  if (!nodes || !nodes.length) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    if (n.x < minX) minX = n.x;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.y > maxY) maxY = n.y;
+  });
+
+  const padX = 80, padY = 80;
+  const gW = (maxX - minX) + padX * 2;
+  const gH = (maxY - minY) + padY * 2;
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const s  = Math.min(W / gW, H / gH, 3);
+
+  const t = d3.zoomIdentity.translate(W / 2, H / 2).scale(s).translate(-cx, -cy);
+  const sel = animate ? svgSel.transition().duration(500).ease(d3.easeCubicOut) : svgSel;
+  sel.call(zoomBehavior.transform, t);
+}
 
 // ── Forensic Evidence Export (PNG & JSON) ──────────────────────────────────────
 $('btn-export-png')?.addEventListener('click', () => exportEvidencePNG());
@@ -1052,6 +1072,9 @@ function initButtons() {
     el.emptyState.classList.remove('hidden');
     el.graphSvg.classList.add('hidden');
     el.zoomCtrls.classList.add('hidden');
+    // Hide minimap too
+    $('minimap-container')?.classList.add('hidden');
+    minimapActive = false;
     el.graphStats.style.display = 'none';
     ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-timeline-toggle','btn-vulnerability','btn-criminals-output','btn-reset'].forEach(id => {
       if ($(id)) $(id).style.display = 'none';
@@ -1512,6 +1535,9 @@ function initKeyboardNav() {
     } else if (e.key.toLowerCase() === 'r') {
       e.preventDefault();
       $('zoom-fit')?.click();
+    } else if (e.key.toLowerCase() === 'm') {
+      e.preventDefault();
+      toggleMinimap();
     } else if (e.key.toLowerCase() === 'c') {
       e.preventDefault();
       const ov = $('criminals-output-overlay');
@@ -2488,6 +2514,166 @@ window.onTimelineScrub     = onTimelineScrub;
 window.togglePlayTimeline  = togglePlayTimeline;
 window.stepTimeline        = stepTimeline;
 window.resetTimeline       = resetTimeline;
+
+// ── Mini-Map ───────────────────────────────────────────────────────────────────
+let minimapActive      = false;
+let minimapRafId       = null;
+const MINIMAP_W        = 160;
+const MINIMAP_H        = 100;
+
+function toggleMinimap() {
+  if (!graphData) return;
+  const container = $('minimap-container');
+  if (!container) return;
+  minimapActive = !minimapActive;
+  if (minimapActive) {
+    container.classList.remove('hidden');
+    drawMinimap();
+    // Wire minimap click-to-navigate
+    container._clickHandler = (e) => minimapClick(e, container);
+    container.addEventListener('click', container._clickHandler);
+  } else {
+    container.classList.add('hidden');
+    if (minimapRafId) cancelAnimationFrame(minimapRafId);
+    if (container._clickHandler) container.removeEventListener('click', container._clickHandler);
+  }
+  const btn = $('btn-minimap-toggle');
+  if (btn) btn.style.color = minimapActive ? 'var(--accent)' : '';
+}
+
+function drawMinimap() {
+  if (!minimapActive || !graphData) return;
+  const canvas = $('minimap-canvas');
+  const viewport = $('minimap-viewport');
+  const wrapper = $('canvas-wrapper');
+  if (!canvas || !svgSel) {
+    minimapRafId = requestAnimationFrame(drawMinimap);
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, MINIMAP_W, MINIMAP_H);
+
+  // Compute graph bounding box from actual node positions
+  const nodes = graphData.nodes;
+  if (!nodes.length) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    if (n.x < minX) minX = n.x;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.y > maxY) maxY = n.y;
+  });
+  const pad = 60;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const gW = maxX - minX;
+  const gH = maxY - minY;
+
+  // Scaling factors from graph-space to minimap pixels
+  const sx = MINIMAP_W / gW;
+  const sy = MINIMAP_H / gH;
+  const sMin = Math.min(sx, sy);
+  const offX = (MINIMAP_W - gW * sMin) / 2;
+  const offY = (MINIMAP_H - gH * sMin) / 2;
+
+  function gx(x) { return (x - minX) * sMin + offX; }
+  function gy(y) { return (y - minY) * sMin + offY; }
+
+  // Draw edges
+  ctx.globalAlpha = 0.25;
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 0.5;
+  graphData.edges.forEach(e => {
+    const src = graphData.nodes.find(n => n.id === e.source);
+    const tgt = graphData.nodes.find(n => n.id === e.target);
+    if (!src || !tgt) return;
+    ctx.beginPath();
+    ctx.moveTo(gx(src.x), gy(src.y));
+    ctx.lineTo(gx(tgt.x), gy(tgt.y));
+    ctx.stroke();
+  });
+
+  // Draw nodes
+  ctx.globalAlpha = 1;
+  nodes.forEach(n => {
+    ctx.beginPath();
+    ctx.arc(gx(n.x), gy(n.y), n.is_criminal ? 2 : 1.2, 0, Math.PI * 2);
+    ctx.fillStyle = n.is_criminal ? '#ef4444' : '#38bdf8';
+    ctx.fill();
+  });
+
+  // Compute current viewport rectangle in graph-space
+  const W = wrapper.clientWidth;
+  const H = wrapper.clientHeight;
+  const transform = d3.zoomTransform(svgSel.node());
+  // Inverse transform: what region of graph-space is visible?
+  const vMinX = (0 - transform.x) / transform.k;
+  const vMinY = (0 - transform.y) / transform.k;
+  const vMaxX = (W - transform.x) / transform.k;
+  const vMaxY = (H - transform.y) / transform.k;
+
+  // Convert viewport corners to minimap pixel coords
+  const vpLeft   = gx(vMinX);
+  const vpTop    = gy(vMinY);
+  const vpRight  = gx(vMaxX);
+  const vpBottom = gy(vMaxY);
+
+  // Update viewport indicator div
+  if (viewport) {
+    const cRect = canvas.getBoundingClientRect();
+    // Position relative to canvas inside container
+    const l = Math.max(0, Math.min(vpLeft, MINIMAP_W));
+    const t = Math.max(0, Math.min(vpTop, MINIMAP_H));
+    const r = Math.max(0, Math.min(vpRight, MINIMAP_W));
+    const b = Math.max(0, Math.min(vpBottom, MINIMAP_H));
+    viewport.style.left   = l + 'px';
+    viewport.style.top    = t + 'px';
+    viewport.style.width  = Math.max(4, r - l) + 'px';
+    viewport.style.height = Math.max(4, b - t) + 'px';
+  }
+
+  minimapRafId = requestAnimationFrame(drawMinimap);
+}
+
+function minimapClick(e, container) {
+  if (!graphData || !svgSel) return;
+  const rect = container.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+
+  // Convert minimap pixel to graph-space
+  const nodes = graphData.nodes;
+  if (!nodes.length) return;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  nodes.forEach(n => {
+    if (n.x < minX) minX = n.x;
+    if (n.x > maxX) maxX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.y > maxY) maxY = n.y;
+  });
+  const pad = 60;
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const gW = maxX - minX;
+  const gH = maxY - minY;
+  const sMin = Math.min(MINIMAP_W / gW, MINIMAP_H / gH);
+  const offX = (MINIMAP_W - gW * sMin) / 2;
+  const offY = (MINIMAP_H - gH * sMin) / 2;
+
+  const gx = (minX) + (px - offX) / sMin;
+  const gy = (minY) + (py - offY) / sMin;
+
+  // Pan to that position
+  const wrapper = $('canvas-wrapper');
+  const W = wrapper.clientWidth;
+  const H = wrapper.clientHeight;
+  const currentK = d3.zoomTransform(svgSel.node()).k;
+
+  const t = d3.zoomIdentity.translate(W / 2, H / 2).scale(currentK).translate(-gx, -gy);
+  svgSel.transition().duration(350).ease(d3.easeCubicOut).call(zoomBehavior.transform, t);
+}
+
+$('btn-minimap-toggle')?.addEventListener('click', toggleMinimap);
+window.toggleMinimap = toggleMinimap;
 
 // ── FEATURE 3: Key Players & Syndicate Vulnerability Matrix ────────────────────
 let vulnerabilityData       = null;

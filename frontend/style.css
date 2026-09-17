@@ -2352,9 +2352,9 @@ html, body {
    FEATURE 3: KEY PLAYERS & SYNDICATE VULNERABILITY MATRIX
    ═══════════════════════════════════════════════════════════════════ */
 .vulnerability-modal {
-  max-width: 980px;
-  width: 96vw;
-  max-height: 88vh;
+  max-width: 1200px;
+  width: 98vw;
+  max-height: 92vh;
 }
 
 .vuln-modal-body {
@@ -2507,6 +2507,8 @@ html, body {
 
 .vuln-table-wrap {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 380px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -2514,26 +2516,43 @@ html, body {
 
 .vuln-table {
   width: 100%;
+  min-width: 860px;
   border-collapse: collapse;
   font-size: 12px;
   text-align: left;
+  table-layout: fixed;
 }
 
 .vuln-table th {
-  background: rgba(15, 23, 42, 0.85);
-  padding: 9px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(13, 19, 31, 0.97);
+  padding: 8px 10px;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
 }
 
+.vuln-table th:nth-child(1) { width: 38px; }
+.vuln-table th:nth-child(2) { width: 160px; }
+.vuln-table th:nth-child(3) { width: 140px; }
+.vuln-table th:nth-child(4) { width: 130px; }
+.vuln-table th:nth-child(5) { width: 95px; }
+.vuln-table th:nth-child(6) { width: 95px; }
+.vuln-table th:nth-child(7) { width: 75px; }
+.vuln-table th:nth-child(8) { width: auto; }
+
 .vuln-table td {
-  padding: 8px 12px;
+  padding: 7px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vuln-table tbody tr:hover {
@@ -2550,18 +2569,25 @@ html, body {
 .vuln-entity-cell {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .vuln-entity-name {
   font-weight: 600;
   color: var(--text-primary);
-  font-size: 12.5px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vuln-entity-meta {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 9px;
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .role-tag {
@@ -2638,18 +2664,69 @@ html, body {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #f87171;
-  padding: 3px 8px;
+  padding: 3px 7px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9.5px;
   border-radius: 3px;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
 }
 
 .btn-disrupt:hover {
   background: rgba(239, 68, 68, 0.25);
   border-color: #ef4444;
   color: #ffffff;
+}
+
+/* ── Mini-Map ───────────────────────────────────────────────────── */
+#minimap-container {
+  position: absolute;
+  bottom: 60px;
+  right: 16px;
+  width: 160px;
+  height: 100px;
+  background: rgba(8, 12, 20, 0.82);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  cursor: crosshair;
+  z-index: 10;
+  transition: opacity 0.2s;
+}
+#minimap-container.hidden {
+  display: none;
+}
+#minimap-container:hover {
+  opacity: 1 !important;
+}
+#minimap-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#minimap-viewport {
+  position: absolute;
+  border: 1.5px solid rgba(59,130,246,0.8);
+  background: rgba(59,130,246,0.08);
+  border-radius: 2px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(59,130,246,0.3);
+  transition: none;
+}
+.minimap-label {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(148,163,184,0.7);
+  pointer-events: none;
+  user-select: none;
 }
 
 /* Canvas Highlight for Articulation Points (Cut-Vertices) */
