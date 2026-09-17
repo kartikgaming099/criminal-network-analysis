@@ -14,6 +14,11 @@ import math
 import re
 from io import StringIO
 
+try:
+    import community as community_louvain
+except ImportError:
+    community_louvain = None
+
 # ── Column type detection ──────────────────────────────────────────────────────
 
 def detect_schema(df: pd.DataFrame) -> str:
@@ -435,10 +440,14 @@ def _finalise(G: nx.Graph, persons: dict, schema: str) -> dict:
                           'schema_detected': schema}}
 
     # ── Community detection ────────────────────────────────────────────────────
-    try:
-        import community as community_louvain
-        partition = community_louvain.best_partition(G)
-    except Exception:
+    partition = None
+    if community_louvain is not None:
+        try:
+            partition = community_louvain.best_partition(G)
+        except Exception:
+            partition = None
+
+    if partition is None:
         try:
             comms = list(nx.community.greedy_modularity_communities(G))
             partition = {}
