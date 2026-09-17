@@ -1705,5 +1705,24 @@ html, body {
   transform: translateX(2px);
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   Syndicate Cluster Isolation & Interaction
+   ═══════════════════════════════════════════════════════════════════ */
+.cluster-group {
+  transition: opacity 0.25s ease;
+}
+.cluster-group:hover .cluster-halo {
+  stroke-width: 2px;
+  stroke-dasharray: 8, 4;
+}
+.cluster-group text {
+  transition: font-size 0.2s, fill 0.2s;
+}
+.cluster-group:hover text {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+
 
 

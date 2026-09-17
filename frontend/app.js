@@ -8,14 +8,15 @@ const API = window.location.hostname === 'localhost' || window.location.hostname
   : '/api';
 
 // ── State ──────────────────────────────────────────────────────────────────────
-let graphData     = null;
-let activeNodeId  = null;
-let activeEdge    = null;
-let zoomBehavior  = null;
-let svgSel        = null;
-let gRootSel      = null;
-let activeNodeMap = null;
-let activeEdges   = null;
+let graphData         = null;
+let activeNodeId      = null;
+let activeEdge        = null;
+let isolatedClusterId = null;
+let zoomBehavior      = null;
+let svgSel            = null;
+let gRootSel          = null;
+let activeNodeMap     = null;
+let activeEdges       = null;
 
 // ── DOM Elements ───────────────────────────────────────────────────────────────
 const $  = id => document.getElementById(id);
@@ -294,24 +295,33 @@ function renderGraph(data, filename) {
     const haloR = maxR + 38;
     const hue  = CLUSTER_COLORS[cluster.id % CLUSTER_COLORS.length];
 
-    gClusters.append('circle')
+    const gCluster = gClusters.append('g')
+      .attr('class', 'cluster-group')
+      .attr('data-cluster-id', cluster.id)
+      .style('cursor', 'pointer');
+
+    gCluster.append('circle')
       .attr('cx', cx).attr('cy', cy).attr('r', haloR)
       .attr('fill', hexAlpha(hue, 0.04))
-      .attr('stroke', hexAlpha(hue, 0.25))
-      .attr('stroke-width', 1.2)
+      .attr('stroke', hexAlpha(hue, 0.35))
+      .attr('stroke-width', 1.3)
       .attr('stroke-dasharray', '5, 4')
       .attr('class', 'cluster-halo');
 
-    gClusters.append('text')
+    gCluster.append('text')
       .attr('x', cx).attr('y', cy - haloR - 8)
       .attr('text-anchor', 'middle')
       .attr('font-size', '10')
       .attr('font-family', 'JetBrains Mono, monospace')
-      .attr('font-weight', '600')
+      .attr('font-weight', '700')
       .attr('letter-spacing', '0.08em')
-      .attr('fill', hexAlpha(hue, 0.65))
-      .attr('pointer-events', 'none')
-      .text(`SYNDICATE #${cluster.id}`);
+      .attr('fill', hexAlpha(hue, 0.8))
+      .text(`SYNDICATE #${cluster.id} [${cluster.size}]`);
+
+    gCluster.on('click', ev => {
+      ev.stopPropagation();
+      isolateCluster(cluster, cx, cy, haloR);
+    });
   });
 
   // Link Vectors
@@ -415,6 +425,8 @@ function renderGraph(data, filename) {
 function onNodeClick(node, edges, nodeMap) {
   activeNodeId = node.id;
   activeEdge   = null;
+  isolatedClusterId = null;
+  d3.selectAll('.cluster-group').attr('opacity', null);
   const connEdges = edges.filter(e => e.source === node.id || e.target === node.id);
   const connIds   = new Set(connEdges.map(e => e.source === node.id ? e.target : e.source));
 
@@ -436,6 +448,8 @@ function onNodeClick(node, edges, nodeMap) {
 function onEdgeClick(edge, nodeMap) {
   activeEdge   = edge;
   activeNodeId = null;
+  isolatedClusterId = null;
+  d3.selectAll('.cluster-group').attr('opacity', null);
 
   d3.selectAll('.edge-line')
     .attr('opacity', d => (d.source === edge.source && d.target === edge.target) ? 1 : 0.05);
@@ -447,11 +461,15 @@ function onEdgeClick(edge, nodeMap) {
 
 // ── Clear Canvas Selections ───────────────────────────────────────────────────
 function clearHighlights() {
-  activeNodeId = null;
-  activeEdge   = null;
+  activeNodeId      = null;
+  activeEdge        = null;
+  isolatedClusterId = null;
   d3.selectAll('.edge-line').attr('opacity', null).classed('highlighted', false);
   d3.selectAll('.node-circle').attr('opacity', null).attr('r', d => nodeR(d)).attr('stroke-width', 2.2);
+  d3.selectAll('.node-g').attr('opacity', null);
   d3.selectAll('.node-label').classed('selected', false);
+  d3.selectAll('.cluster-group').attr('opacity', null);
+  hideBanner();
 }
 
 // ── Inspector Detail Panel ─────────────────────────────────────────────────────
@@ -1026,8 +1044,9 @@ function initButtons() {
     hideBanner();
     closeDetailPanel();
     document.querySelectorAll('.dataset-item').forEach(e => e.classList.remove('active'));
-    activeNodeMap = null;
-    activeEdges   = null;
+    activeNodeMap     = null;
+    activeEdges       = null;
+    isolatedClusterId = null;
     $('canvas-search-wrap')?.classList.add('hidden');
     $('search-dropdown')?.classList.add('hidden');
     const searchInput = $('node-search-input');
@@ -1382,6 +1401,52 @@ function copyNodeDossier(nodeId) {
 }
 
 // ── Utility Helpers ────────────────────────────────────────────────────────────
+function isolateCluster(cluster, cx, cy, haloR) {
+  if (isolatedClusterId === cluster.id) {
+    clearHighlights();
+    return;
+  }
+
+  isolatedClusterId = cluster.id;
+  activeNodeId = null;
+  activeEdge   = null;
+
+  const memberSet = new Set(cluster.members);
+
+  // Dim nodes outside this syndicate
+  d3.selectAll('.node-g')
+    .attr('opacity', d => memberSet.has(d.id) ? 1 : 0.08);
+
+  // Dim edges outside this syndicate
+  d3.selectAll('.edge-line')
+    .attr('opacity', d => (memberSet.has(d.source) && memberSet.has(d.target)) ? 1 : 0.04)
+    .classed('highlighted', d => (memberSet.has(d.source) && memberSet.has(d.target)));
+
+  // Highlight only this cluster's halo
+  d3.selectAll('.cluster-group')
+    .attr('opacity', function() {
+      return this.getAttribute('data-cluster-id') === String(cluster.id) ? 1 : 0.12;
+    });
+
+  // Smoothly center the cluster in view
+  const wrapper = $('canvas-wrapper');
+  const W = wrapper.clientWidth  || 900;
+  const H = wrapper.clientHeight || 700;
+  const targetScale = Math.min(2.0, Math.max(0.55, (Math.min(W, H) * 0.72) / (haloR * 2)));
+
+  const transform = d3.zoomIdentity
+    .translate(W / 2, H / 2)
+    .scale(targetScale)
+    .translate(-cx, -cy);
+
+  svgSel?.transition()
+    .duration(650)
+    .ease(d3.easeCubicOut)
+    .call(zoomBehavior.transform, transform);
+
+  showBanner(`ISOLATING SYNDICATE #${cluster.id} (${cluster.size} ENTITIES) · Click empty canvas to restore all`, 'info');
+}
+
 function shortenName(name) {
   if (!name) return '';
   if (name.length <= 13) return name;
