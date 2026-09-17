@@ -200,6 +200,78 @@ def parse_vehicle_transfers(df: pd.DataFrame, G: nx.Graph, persons: dict):
                   suspicious=suspicious)
 
 
+def parse_generic(df: pd.DataFrame, G: nx.Graph, persons: dict):
+    """
+    Intelligent fallback for user-uploaded custom datasets in CSV/JSON/Excel/TXT format.
+    Automatically detects pairs of connected entities or entity groups and creates relational edges.
+    """
+    cols = list(df.columns)
+    if not cols:
+        return
+
+    lower_map = {str(c).lower().strip(): c for c in cols}
+
+    src_candidates = ['source', 'from', 'caller', 'caller_id', 'sender', 'person1', 'person_1', 'person_a', 'user_a', 'entity1', 'origin', 'from_owner', 'from_account_name']
+    tgt_candidates = ['target', 'to', 'receiver', 'receiver_id', 'recipient', 'person2', 'person_2', 'person_b', 'user_b', 'entity2', 'destination', 'to_owner', 'to_account_name']
+
+    src_col = None
+    tgt_col = None
+
+    for sc in src_candidates:
+        if sc in lower_map:
+            src_col = lower_map[sc]
+            break
+
+    for tc in tgt_candidates:
+        if tc in lower_map:
+            tgt_col = lower_map[tc]
+            break
+
+    # If not explicitly named, check if first two text columns can form edges
+    if not (src_col and tgt_col):
+        text_cols = [c for c in cols if df[c].dtype == 'object' or str(df[c].dtype).startswith('str')]
+        if len(text_cols) >= 2:
+            src_col, tgt_col = text_cols[0], text_cols[1]
+
+    if src_col and tgt_col and src_col != tgt_col:
+        for _, row in df.iterrows():
+            a = str(row.get(src_col, '')).strip()
+            b = str(row.get(tgt_col, '')).strip()
+            if not a or not b or a in ('nan', 'None', '') or b in ('nan', 'None', ''):
+                continue
+            _ensure_person(G, persons, a, row.to_dict(), 'custom_upload')
+            _ensure_person(G, persons, b, row.to_dict(), 'custom_upload')
+
+            desc = f"Connected link between {a} and {b}"
+            _add_edge(G, a, b, 'connected', desc)
+    else:
+        # Single entity table: add persons and link shared clusters/categories if present
+        name_col = cols[0]
+        cluster_col = None
+        for c in cols[1:]:
+            if any(k in str(c).lower() for k in ('cluster', 'group', 'category', 'gang', 'syndicate')):
+                cluster_col = c
+                break
+
+        cluster_map = {}
+        for _, row in df.iterrows():
+            name = str(row.get(name_col, '')).strip()
+            if not name or name in ('nan', 'None', ''):
+                continue
+            _ensure_person(G, persons, name, row.to_dict(), 'custom_upload')
+            if cluster_col:
+                grp = str(row.get(cluster_col, '')).strip()
+                if grp and grp not in ('nan', 'None', ''):
+                    cluster_map.setdefault(grp, []).append(name)
+
+        if cluster_map:
+            for grp, members in cluster_map.items():
+                members = list(set(members))
+                for i in range(len(members)):
+                    for j in range(i + 1, len(members)):
+                        _add_edge(G, members[i], members[j], 'same criminal cluster', f"Both in group {grp}")
+
+
 # ── Graph helpers ──────────────────────────────────────────────────────────────
 
 def _ensure_person(G: nx.Graph, persons: dict, name: str, row_data: dict, source: str):
@@ -328,6 +400,8 @@ def _dispatch(schema, df, G, persons, amount_threshold):
         parse_vehicle_registrations(df, G, persons)
     elif schema == 'vehicle_ownership_transfers':
         parse_vehicle_transfers(df, G, persons)
+    else:
+        parse_generic(df, G, persons)
 
 
 def _filter_suspected(result: dict) -> dict:

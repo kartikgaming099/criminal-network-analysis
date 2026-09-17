@@ -18,7 +18,9 @@ import os
 import sys
 import json
 import glob
+import io
 import traceback
+import pandas as pd
 
 # Ensure backend/ modules (graph_engine, ai_engine) are importable on Vercel
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -160,12 +162,32 @@ def upload_csv():
 
     try:
         raw_bytes = f.read()
-        # For now, attempt UTF-8 decode (CSV path). Non-CSV types inform the user.
         if ext in ('xls', 'xlsx'):
-            return _error("XLS/XLSX: Please export as CSV first, then re-upload.")
-        if ext == 'json':
-            return _error("JSON upload: Please convert to CSV format first, then re-upload.")
-        csv_text = raw_bytes.decode('utf-8', errors='replace')
+            df = pd.read_excel(io.BytesIO(raw_bytes))
+            csv_text = df.to_csv(index=False)
+        elif ext == 'json':
+            try:
+                df = pd.read_json(io.BytesIO(raw_bytes))
+            except Exception:
+                parsed = json.loads(raw_bytes.decode('utf-8', errors='replace'))
+                if isinstance(parsed, dict):
+                    list_vals = [v for v in parsed.values() if isinstance(v, list)]
+                    df = pd.DataFrame(list_vals[0]) if list_vals else pd.DataFrame([parsed])
+                elif isinstance(parsed, list):
+                    df = pd.DataFrame(parsed)
+                else:
+                    df = pd.DataFrame()
+            csv_text = df.to_csv(index=False)
+        elif ext == 'txt':
+            raw_str = raw_bytes.decode('utf-8', errors='replace')
+            try:
+                df = pd.read_csv(io.StringIO(raw_str), sep=None, engine='python')
+                csv_text = df.to_csv(index=False)
+            except Exception:
+                csv_text = raw_str
+        else:
+            csv_text = raw_bytes.decode('utf-8', errors='replace')
+
         graph = build_graph_from_csv(csv_text, filename, threshold)
         return _ok({'graph': graph, 'filename': filename})
     except Exception as e:
