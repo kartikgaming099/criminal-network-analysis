@@ -61,7 +61,8 @@
   --edge-default:     #64748b;
 
   /* Layout Dimensions */
-  --navbar-h:         54px;
+  --navbar-h:         54px;          /* single-row (no data) */
+  --navbar-h-loaded:  54px;          /* same height; action rail scrolls */
   --sidebar-w:        280px;
   --detail-w:         340px;
   --radius-xs:        3px;
@@ -166,24 +167,34 @@ html, body {
   left: 0;
   right: 0;
   z-index: 100;
-  min-height: var(--navbar-h);
   height: var(--navbar-h);
-  display: flex;
+  /* Two logical columns: [brand + metrics] | [scrollable action rail] */
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 12px 0 16px;
+  gap: 0;
+  padding: 0;
   background: var(--bg-surface);
   border-bottom: 1px solid var(--border);
+  /* NO overflow:hidden here — let the action rail be the clip boundary */
+}
+
+/* Left column: brand + optional center metrics pill, always protected */
+.navbar-left {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  overflow: hidden;
+  padding: 0 12px 0 16px;
+  flex-shrink: 0;
+  height: 100%;
+  border-right: 1px solid var(--border);
 }
 
 .navbar-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-shrink: 0;   /* never compress the CRIMENET title */
-  min-width: 0;
+  flex-shrink: 0;   /* CRIMENET title never compresses */
 }
 
 .brand-icon {
@@ -272,36 +283,41 @@ html, body {
   background: var(--border);
 }
 
-/* Navbar Actions — scrollable toolbar when buttons overflow */
+/* Right column: the scrollable action rail */
 .navbar-actions {
+  /* fills the 1fr grid column */
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  /* THIS is the clip boundary — not .navbar */
+  overflow: hidden;
   display: flex;
   align-items: center;
-  /* let it shrink but not past 0; overflow handled by inner scroll container */
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
 }
 
-/* Inner scrollable wrapper for the action buttons */
+/* The actual horizontal-scrolling container */
 .navbar-actions-scroll {
   display: flex;
   align-items: center;
   gap: 6px;
+  /* take ALL available width so overflow-x:auto can measure correctly */
+  width: 100%;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 4px 2px;   /* a little breathing room so focus rings aren't clipped */
-  /* hide scrollbar track but keep it functional */
+  padding: 6px 12px 6px 8px;   /* top/bottom room for focus rings; right padding so last btn isn't flush */
+  /* Thin themed scrollbar */
   scrollbar-width: thin;
-  scrollbar-color: #25334d transparent;
+  scrollbar-color: rgba(59,130,246,0.5) transparent;
 }
 .navbar-actions-scroll::-webkit-scrollbar {
-  height: 3px;
+  height: 4px;
 }
 .navbar-actions-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 .navbar-actions-scroll::-webkit-scrollbar-thumb {
-  background: #25334d;
+  background: rgba(59,130,246,0.45);
   border-radius: 4px;
 }
 .navbar-actions-scroll::-webkit-scrollbar-thumb:hover {
