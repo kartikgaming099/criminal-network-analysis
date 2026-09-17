@@ -577,10 +577,9 @@ def _finalise(G: nx.Graph, persons: dict, schema: str) -> dict:
 
 def _compute_cluster_layout(G: nx.Graph, partition: dict) -> dict:
     """
-    Intelligent layout: clusters placed in a grid pattern with natural spacing.
-    Within each cluster, nodes are arranged in a compact circular or grid layout.
-    High-degree nodes (hubs) are placed at the cluster center.
-    Produces a readable graph with no giant ring artifacts.
+    Place cluster centers on a large outer circle.
+    Within each cluster, arrange nodes in a circle with spacing that
+    GUARANTEES no node overlaps (based on actual node count).
     Uses 3000×3000 canvas units — D3 zoom handles navigation.
     """
     cluster_groups: dict = {}
@@ -588,90 +587,49 @@ def _compute_cluster_layout(G: nx.Graph, partition: dict) -> dict:
         cluster_groups.setdefault(cid, []).append(node)
 
     num_clusters = len(cluster_groups)
-    CANVAS = 3000
-    cx, cy = CANVAS / 2, CANVAS / 2
+    CANVAS  = 3000
+    cx, cy  = CANVAS / 2, CANVAS / 2
 
-    # Sort clusters by size descending (largest clusters get prime spots)
-    sorted_clusters = sorted(cluster_groups.items(), key=lambda x: -len(x[1]))
-
-    # Determine cluster grid dimensions
-    cols = max(1, math.ceil(math.sqrt(num_clusters * 1.5)))
-    rows = max(1, math.ceil(num_clusters / cols))
-
-    # Cell size — distribute evenly across canvas with padding
-    pad = 180
-    cell_w = (CANVAS - pad * 2) / max(cols, 1)
-    cell_h = (CANVAS - pad * 2) / max(rows, 1)
+    # Outer ring radius — scales with cluster count so clusters never touch
+    OUTER_R = max(400, min(CANVAS * 0.38, 120 * num_clusters))
 
     positions = {}
-    degree_map = dict(G.degree())
 
-    for idx, (cid, members) in enumerate(sorted_clusters):
+    for idx, (cid, members) in enumerate(sorted(cluster_groups.items())):
         n = len(members)
-        row = idx // cols
-        col = idx % cols
 
-        # Cluster center — offset to create natural variation (not a perfect grid)
-        offset_x = (col + 0.5) * cell_w + pad
-        offset_y = (row + 0.5) * cell_h + pad
-
-        # Add slight jitter to break monotony
-        jitter_x = (hash(str(cid) + 'x') % 40) - 20
-        jitter_y = (hash(str(cid) + 'y') % 40) - 20
-        ccx = offset_x + jitter_x
-        ccy = offset_y + jitter_y
+        # Cluster center on outer circle
+        if num_clusters == 1:
+            ccx, ccy = cx, cy
+        else:
+            angle = (2 * math.pi * idx) / num_clusters - math.pi / 2
+            ccx   = cx + OUTER_R * math.cos(angle)
+            ccy   = cy + OUTER_R * math.sin(angle)
 
         if n == 1:
             positions[members[0]] = (ccx, ccy)
             continue
 
-        # Sort members: high-degree nodes first (hub at center)
-        members_sorted = sorted(members, key=lambda m: -degree_map.get(m, 0))
+        # Inner radius: each node needs arc-spacing of at least 60px
+        # arc_per_node = 2π * r / n ≥ 60  →  r ≥ 60n / (2π) ≈ 9.55 * n
+        MIN_SPACING = 70   # px between node centres
+        inner_r = max(90, int(MIN_SPACING * n / (2 * math.pi)) + 40)
 
-        # Inner layout radius scales with sqrt(n) to keep clusters compact
-        MIN_SPACING = 55   # px between node centres
-        inner_r = max(70, int(MIN_SPACING * math.sqrt(n) / 1.5))
+        # Cap so clusters don't physically overlap each other
+        # Distance between adjacent cluster centres ≈ 2*OUTER_R*sin(π/num_clusters)
+        if num_clusters > 1:
+            inter_dist = 2 * OUTER_R * math.sin(math.pi / num_clusters)
+            max_inner  = int(inter_dist / 2.2)
+            inner_r    = min(inner_r, max_inner)
 
-        # Cap inner radius to cell size so clusters don't overlap neighbours
-        max_inner = int(min(cell_w, cell_h) * 0.42)
-        inner_r = min(inner_r, max_inner)
-
-        # Place hub node at cluster center if it has degree >= 3
-        hub = members_sorted[0]
-        remaining = members_sorted[1:]
-
-        if degree_map.get(hub, 0) >= 3 and n > 3:
-            positions[hub] = (ccx, ccy)
-            ring_members = remaining
-        else:
-            ring_members = members_sorted
-
-        # Arrange remaining members on inner circle(s)
-        if len(ring_members) <= 12:
-            # Single ring
-            for i, member in enumerate(ring_members):
-                a = (2 * math.pi * i) / len(ring_members) - math.pi / 2
-                positions[member] = (
-                    ccx + inner_r * math.cos(a),
-                    ccy + inner_r * math.sin(a),
-                )
-        else:
-            # Multi-ring layout for large clusters
-            ring1_count = min(12, len(ring_members) // 2 + 1)
-            ring2_members = ring_members[ring1_count:]
-            r1 = inner_r
-            r2 = inner_r * 1.8
-
-            for i, member in enumerate(ring_members[:ring1_count]):
-                a = (2 * math.pi * i) / ring1_count - math.pi / 2
-                positions[member] = (ccx + r1 * math.cos(a), ccy + r1 * math.sin(a))
-
-            for i, member in enumerate(ring2_members):
-                a = (2 * math.pi * i) / max(len(ring2_members), 1) - math.pi / 2
-                positions[member] = (ccx + r2 * math.cos(a), ccy + r2 * math.sin(a))
+        for i, member in enumerate(members):
+            a = (2 * math.pi * i) / n - math.pi / 2
+            positions[member] = (
+                ccx + inner_r * math.cos(a),
+                ccy + inner_r * math.sin(a),
+            )
 
     return positions
-
 
 
 def _cluster_center(members: list, positions: dict) -> dict:
