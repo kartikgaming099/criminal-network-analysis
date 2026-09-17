@@ -692,8 +692,9 @@ $('btn-anomalies').addEventListener('click', async () => {
 // ── Case Briefing Dossier ──────────────────────────────────────────────────────
 $('btn-summary').addEventListener('click', async () => {
   if (!graphData) return;
-  if (el.aiTitle) el.aiTitle.textContent = 'EXECUTIVE CASE INTELLIGENCE BRIEFING';
+  // showAiModal resets aiTitle, so we set it AFTER the call
   showAiModal('Synthesizing Case Dossier & Intelligence Directives…');
+  if (el.aiTitle) el.aiTitle.textContent = 'EXECUTIVE CASE INTELLIGENCE BRIEFING';
   try {
     const res  = await fetch(`${API}/analyze/summary`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -702,6 +703,7 @@ $('btn-summary').addEventListener('click', async () => {
         clusters: graphData.clusters, stats: graphData.stats,
       }),
     });
+    if (!res.ok) throw new Error(`Server error: ${res.status} ${res.statusText}`);
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     const s = json.summary;
@@ -712,14 +714,23 @@ $('btn-summary').addEventListener('click', async () => {
            <div class="ai-section-value ${cls}" style="white-space:pre-wrap;">${content}</div></div>`
         : '';
 
-    el.aiBody.innerHTML = `<div class="fade-in">
-      ${s.title ? `<div style="font-size:14px;font-weight:700;letter-spacing:0.04em;color:#f8fafc;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);font-family:var(--font-mono);">${s.title.toUpperCase()}</div>` : ''}
-      ${sec('Executive Overview',            s.overview,           'highlight')}
-      ${sec('Syndicate Hierarchy & Nodes',   s.network_breakdown)}
-      ${sec('Cross-Repository Linkages',     s.cross_network)}
-      ${sec('Key Persons of Interest',       s.key_suspects)}
-      ${sec('Investigative Directives',      s.recommended_actions, 'warning')}
-    </div>`;
+    // If no sections were parsed, fall back to displaying the raw response
+    const hasSections = !!(s.overview || s.network_breakdown || s.cross_network || s.key_suspects || s.recommended_actions);
+    const bodyContent = hasSections
+      ? `<div class="fade-in">
+          ${s.title ? `<div style="font-size:14px;font-weight:700;letter-spacing:0.04em;color:#f8fafc;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);font-family:var(--font-mono);">${s.title.toUpperCase()}</div>` : ''}
+          ${sec('Executive Overview',            s.overview,           'highlight')}
+          ${sec('Syndicate Hierarchy & Nodes',   s.network_breakdown)}
+          ${sec('Cross-Repository Linkages',     s.cross_network)}
+          ${sec('Key Persons of Interest',       s.key_suspects)}
+          ${sec('Investigative Directives',      s.recommended_actions, 'warning')}
+        </div>`
+      : `<div class="fade-in"><div class="ai-section">
+          <div class="ai-section-label">INTELLIGENCE ASSESSMENT</div>
+          <div class="ai-section-value" style="white-space:pre-wrap;">${s.raw_response || 'No data returned from analysis service.'}</div>
+        </div></div>`;
+
+    el.aiBody.innerHTML = bodyContent;
   } catch (err) {
     el.aiBody.innerHTML = `<div style="color:#f87171;padding:12px;font-family:var(--font-mono);">Dossier compilation error: ${err.message}</div>`;
   }
