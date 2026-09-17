@@ -36,6 +36,9 @@ const el = {
   legendSec:    $('legend-section'),
   infoBanner:   $('info-banner'),
   infoBannerTxt:$('info-banner-text'),
+  poiOverlay:   $('poi-overlay'),
+  poiBody:      $('poi-body'),
+  poiCount:     $('poi-count'),
 };
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
@@ -55,6 +58,8 @@ function hideLoading() {
 }
 
 // ── Evidence Upload ────────────────────────────────────────────────────────────
+const ALLOWED_EXTS = ['.csv', '.json', '.xls', '.xlsx', '.txt'];
+
 function initUpload() {
   const zone  = $('upload-zone');
   const input = $('file-input');
@@ -66,8 +71,18 @@ function initUpload() {
     e.preventDefault();
     zone.classList.remove('dragover');
     const f = e.dataTransfer.files[0];
-    if (f?.name.endsWith('.csv')) uploadFile(f);
-    else showBanner('Please provide a valid .csv evidence file', 'danger');
+    if (f && ALLOWED_EXTS.some(ext => f.name.toLowerCase().endsWith(ext))) uploadFile(f);
+    else showBanner('Unsupported file type. Please use CSV, JSON, XLS, XLSX, or TXT.', 'danger');
+  });
+
+  // Show Prototype toggle
+  $('btn-show-prototype')?.addEventListener('click', () => {
+    const list = $('dataset-list');
+    const btn  = $('btn-show-prototype');
+    const hidden = list.style.display === 'none';
+    list.style.display = hidden ? '' : 'none';
+    btn.querySelector('span').textContent = hidden ? 'Hide Prototype Data' : 'Show Prototype Data';
+    if (hidden) loadDatasetList();
   });
 }
 
@@ -83,7 +98,12 @@ async function uploadFile(file) {
     handleGraphResponse(json.graph, file.name);
   } catch (err) {
     hideLoading();
-    showBanner('Ingestion error: ' + err.message, 'danger');
+    // If backend rejected, still show a helpful message about file format
+    if (err.message && err.message.includes('CSV')) {
+      showBanner('This file type may not be directly supported. Please convert to CSV for best results.', 'danger');
+    } else {
+      showBanner('Ingestion error: ' + err.message, 'danger');
+    }
   }
 }
 
@@ -220,7 +240,7 @@ function renderGraph(data, filename) {
   $('stat-num-links').textContent    = data.stats.total_edges;
   $('stat-num-clusters').textContent = data.stats.total_clusters;
   el.graphStats.style.display = 'flex';
-  ['btn-summary','btn-anomalies','btn-reset'].forEach(id => $(id).style.display = '');
+  ['btn-poi','btn-summary','btn-anomalies','btn-criminals-output','btn-reset'].forEach(id => $(id).style.display = '');
   el.filterSec.style.display = '';
   el.legendSec.style.display = '';
 
@@ -372,6 +392,9 @@ function renderGraph(data, filename) {
   svgSel.call(zoomBehavior.transform, initTransform);
 
   svgSel.on('click', () => { clearHighlights(); closeDetailPanel(); });
+
+  // Update POI badge count
+  if (typeof updatePOICount === 'function') updatePOICount();
 }
 
 // ── Node Click Handler ─────────────────────────────────────────────────────────
@@ -805,17 +828,25 @@ function initButtons() {
     el.graphSvg.classList.add('hidden');
     el.zoomCtrls.classList.add('hidden');
     el.graphStats.style.display = 'none';
-    ['btn-summary','btn-anomalies','btn-reset'].forEach(id => $(id).style.display = 'none');
+    ['btn-poi','btn-summary','btn-anomalies','btn-criminals-output','btn-reset'].forEach(id => $(id).style.display = 'none');
     el.filterSec.style.display = 'none';
     el.legendSec.style.display = 'none';
     hideBanner();
     closeDetailPanel();
     document.querySelectorAll('.dataset-item').forEach(e => e.classList.remove('active'));
+    // close criminals panel too
+    closeCriminalsOutput();
   });
 
   $('btn-load-all').addEventListener('click', () => loadAllFiles(false));
   $('btn-suspected-only').addEventListener('click', () => loadAllFiles(true));
-  $('btn-load-all-quick').addEventListener('click', () => loadAllFiles(false));
+
+  // Criminals Output panel
+  $('btn-criminals-output')?.addEventListener('click', () => openCriminalsOutput());
+  $('criminals-output-close')?.addEventListener('click', () => closeCriminalsOutput());
+  $('criminals-output-overlay')?.addEventListener('click', e => {
+    if (e.target === $('criminals-output-overlay')) closeCriminalsOutput();
+  });
 }
 
 // ── Correlation Display Filters ────────────────────────────────────────────────
@@ -888,3 +919,282 @@ function hexAlpha(hex, a) {
 // Expose for inline handlers
 window.analyzeCluster = analyzeCluster;
 window.explainEdge    = explainEdge;
+
+// -- POI Registry ---------------------------------------------------------------
+let _poiSort = 'risk';
+
+function openPOIPanel() {
+  if (!graphData) return;
+  el.poiOverlay.classList.remove('hidden');
+  renderPOICards();
+}
+
+function closePOIPanel() {
+  el.poiOverlay.classList.add('hidden');
+}
+
+document.getElementById('btn-poi').addEventListener('click', openPOIPanel);
+document.getElementById('poi-close').addEventListener('click', closePOIPanel);
+el.poiOverlay.addEventListener('click', function(e) {
+  if (e.target === el.poiOverlay) closePOIPanel();
+});
+document.getElementById('poi-search').addEventListener('input', function() {
+  renderPOICards();
+});
+
+function sortPOI(by) {
+  _poiSort = by;
+  ['risk','degree','name'].forEach(function(k) {
+    var btn = document.getElementById('poi-sort-' + k);
+    if (btn) btn.classList.toggle('active', k === by);
+  });
+  renderPOICards();
+}
+
+function renderPOICards() {
+  if (!graphData) return;
+  var searchEl = document.getElementById('poi-search');
+  var query = (searchEl ? searchEl.value : '').toLowerCase().trim();
+
+  var criminals = graphData.nodes.filter(function(n) { return n.is_criminal; });
+  if (query) {
+    criminals = criminals.filter(function(n) {
+      return (n.id||'').toLowerCase().includes(query) || (n.label||'').toLowerCase().includes(query);
+    });
+  }
+
+  criminals = criminals.slice().sort(function(a, b) {
+    if (_poiSort === 'name')   return (a.id||'').localeCompare(b.id||'');
+    if (_poiSort === 'degree') return (b.degree||0) - (a.degree||0);
+    var ra = calcRisk(a, graphData.edges.filter(function(e){ return e.source===a.id||e.target===a.id; }));
+    var rb = calcRisk(b, graphData.edges.filter(function(e){ return e.source===b.id||e.target===b.id; }));
+    return rb.score - ra.score;
+  });
+
+  var allCrim = graphData.nodes.filter(function(n){ return n.is_criminal; });
+  function getEdges(n) { return graphData.edges.filter(function(e){ return e.source===n.id||e.target===n.id; }); }
+
+  var critCount   = allCrim.filter(function(n){ return calcRisk(n,getEdges(n)).score>=70; }).length;
+  var elevCount   = allCrim.filter(function(n){ var s=calcRisk(n,getEdges(n)).score; return s>=40&&s<70; }).length;
+  var stolenCount = allCrim.filter(function(n){ return n.has_stolen_vehicle; }).length;
+  var multiCount  = allCrim.filter(function(n){ return n.multi_source; }).length;
+
+  function setTxt(id,v){ var e=document.getElementById(id); if(e) e.textContent=v; }
+  setTxt('poi-stat-total',    allCrim.length);
+  setTxt('poi-stat-critical', critCount);
+  setTxt('poi-stat-elevated', elevCount);
+  setTxt('poi-stat-stolen',   stolenCount);
+  setTxt('poi-stat-multi',    multiCount);
+  if (el.poiCount) el.poiCount.textContent = allCrim.length;
+
+  if (!criminals.length) {
+    el.poiBody.innerHTML = '<div class="poi-empty">' + (query ? 'No matches for &ldquo;'+query+'&rdquo;' : 'No persons of interest in current dataset.') + '</div>';
+    return;
+  }
+
+  var cards = criminals.map(function(node) {
+    var connEdges = graphData.edges.filter(function(e){ return e.source===node.id||e.target===node.id; });
+    var risk      = calcRisk(node, connEdges);
+    var riskClass = risk.score >= 70 ? 'critical' : risk.score >= 40 ? 'elevated' : 'routine';
+    var suspCount = connEdges.filter(function(e){ return e.suspicious; }).length;
+    var clusterNum = node.cluster != null ? node.cluster : (node.details ? node.details.cluster : null);
+    var edgeTypes = Array.from(new Set(connEdges.map(function(e){ return e.type; })));
+    var totalAmt  = connEdges.reduce(function(s,e){ return s+(e.total_amount||0); }, 0);
+
+    var metaTags = '';
+    if (node.has_stolen_vehicle) metaTags += '<span class="poi-meta-tag stolen">STOLEN VEHICLE</span>';
+    if (node.multi_source)       metaTags += '<span class="poi-meta-tag multi">CROSS-REPO</span>';
+    if (clusterNum != null)      metaTags += '<span class="poi-meta-tag cluster">SYNDICATE #'+clusterNum+'</span>';
+    edgeTypes.slice(0,2).forEach(function(t){ metaTags += '<span class="poi-meta-tag">'+t.toUpperCase()+'</span>'; });
+
+    var amtStr = totalAmt > 0 ? '\u20b9'+Math.round(totalAmt).toLocaleString('en-IN') : '\u2014';
+    var safeId = node.id.replace(/"/g, '&quot;');
+
+    return '<div class="poi-card risk-'+riskClass+' fade-in" onclick="poiCardClick(this.dataset.nid)" data-nid="'+safeId+'">'
+      + '<div class="poi-card-header">'
+      +   '<div class="poi-card-name">'+(node.label||node.id)+'</div>'
+      +   '<span class="poi-risk-pill '+riskClass+'">'+risk.level+'</span>'
+      + '</div>'
+      + '<div class="poi-card-meta">'+metaTags+'</div>'
+      + '<div class="poi-card-stats">'
+      +   '<div class="poi-cstat"><div class="poi-cstat-val">'+(node.degree||0)+'</div><div class="poi-cstat-key">LINKS</div></div>'
+      +   '<div class="poi-cstat"><div class="poi-cstat-val">'+suspCount+'</div><div class="poi-cstat-key">FLAGGED</div></div>'
+      +   '<div class="poi-cstat"><div class="poi-cstat-val">'+risk.score+'</div><div class="poi-cstat-key">RISK/100</div></div>'
+      +   '<div class="poi-cstat"><div class="poi-cstat-val" style="font-size:12px;">'+amtStr+'</div><div class="poi-cstat-key">TRANSACTIONS</div></div>'
+      + '</div>'
+      + '<div class="poi-risk-bar"><div class="poi-risk-fill" style="width:'+risk.score+'%;background:'+risk.color+';"></div></div>'
+      + '</div>';
+  });
+
+  el.poiBody.innerHTML = '<div class="poi-grid">'+cards.join('')+'</div>';
+}
+
+function poiCardClick(nodeId) {
+  closePOIPanel();
+  if (!graphData) return;
+  var node = graphData.nodes.find(function(n){ return n.id === nodeId; });
+  if (!node) return;
+  var nodeMap = {};
+  graphData.nodes.forEach(function(n){ nodeMap[n.id] = n; });
+  onNodeClick(node, graphData.edges, nodeMap);
+}
+
+function updatePOICount() {
+  if (!graphData || !el.poiCount) return;
+  el.poiCount.textContent = graphData.nodes.filter(function(n){ return n.is_criminal; }).length;
+}
+
+window.sortPOI      = sortPOI;
+window.poiCardClick = poiCardClick;
+window.updatePOICount = updatePOICount;
+
+// -- Criminals-Only Output Panel -----------------------------------------------
+let criminalsZoom = null;
+
+function openCriminalsOutput() {
+  if (!graphData) return;
+  const overlay = document.getElementById('criminals-output-overlay');
+  overlay.classList.remove('hidden');
+  renderCriminalsOutput();
+}
+
+function closeCriminalsOutput() {
+  const overlay = document.getElementById('criminals-output-overlay');
+  if (overlay) overlay.classList.add('hidden');
+}
+
+function renderCriminalsOutput() {
+  if (!graphData) return;
+
+  const criminalNodes = graphData.nodes.filter(n => n.is_criminal);
+  const criminalIds   = new Set(criminalNodes.map(n => n.id));
+  const criminalEdges = graphData.edges.filter(
+    e => criminalIds.has(e.source) && criminalIds.has(e.target)
+  );
+
+  const countEl = document.getElementById('criminals-output-count');
+  if (countEl) countEl.textContent = criminalNodes.length + ' criminals \u00b7 ' + criminalEdges.length + ' links';
+
+  const listPanel = document.getElementById('criminals-list-panel');
+  if (!listPanel) return;
+
+  if (!criminalNodes.length) {
+    listPanel.innerHTML = '<div style="color:#64748b;text-align:center;padding:24px;font-family:var(--font-mono);font-size:12px;">NO CRIMINALS FOUND IN CURRENT DATASET</div>';
+    renderCriminalsGraph([], []);
+    return;
+  }
+
+  const sortedCriminals = criminalNodes.slice().sort(function(a, b) {
+    var ra = calcRisk(a, graphData.edges.filter(function(e){ return e.source===a.id||e.target===a.id; }));
+    var rb = calcRisk(b, graphData.edges.filter(function(e){ return e.source===b.id||e.target===b.id; }));
+    return rb.score - ra.score;
+  });
+
+  listPanel.innerHTML = '<div class="criminals-output-grid">' + sortedCriminals.map(function(node) {
+    var connEdges = graphData.edges.filter(function(e){ return e.source===node.id||e.target===node.id; });
+    var crimConn  = connEdges.filter(function(e){ return criminalIds.has(e.source) && criminalIds.has(e.target); });
+    var risk = calcRisk(node, connEdges);
+    var riskClass = risk.score >= 70 ? 'critical' : risk.score >= 40 ? 'elevated' : 'routine';
+    var safeId = (node.id||'').replace(/"/g, '&quot;');
+    var tags = '';
+    if (node.has_stolen_vehicle) tags += '<span class="poi-meta-tag stolen">STOLEN VEHICLE</span>';
+    if (node.multi_source)       tags += '<span class="poi-meta-tag multi">CROSS-REPO</span>';
+    if (node.cluster != null)    tags += '<span class="poi-meta-tag cluster">SYNDICATE #'+node.cluster+'</span>';
+    return '<div class="criminals-card risk-' + riskClass + '">'
+      + '<div class="criminals-card-header">'
+      + '<div class="criminals-card-name">' + (node.label||node.id) + '</div>'
+      + '<span class="poi-risk-pill ' + riskClass + '">' + risk.level + ' ' + risk.score + '</span>'
+      + '</div>'
+      + '<div class="poi-card-meta">' + tags + '</div>'
+      + '<div class="poi-card-stats">'
+      + '<div class="poi-cstat"><div class="poi-cstat-val">' + (node.degree||0) + '</div><div class="poi-cstat-key">TOTAL LINKS</div></div>'
+      + '<div class="poi-cstat"><div class="poi-cstat-val">' + crimConn.length + '</div><div class="poi-cstat-key">CRIM LINKS</div></div>'
+      + '<div class="poi-cstat"><div class="poi-cstat-val">' + connEdges.filter(function(e){ return e.suspicious; }).length + '</div><div class="poi-cstat-key">FLAGGED</div></div>'
+      + '</div>'
+      + '<div class="poi-risk-bar"><div class="poi-risk-fill" style="width:'+risk.score+'%;background:'+risk.color+';"></div></div>'
+      + '</div>';
+  }).join('') + '</div>';
+
+  renderCriminalsGraph(criminalNodes, criminalEdges);
+}
+
+function renderCriminalsGraph(nodes, edges) {
+  var svgEl = document.getElementById('criminals-graph-svg');
+  if (!svgEl) return;
+  if (!nodes.length) { d3.select(svgEl).selectAll('*').remove(); return; }
+
+  var parent = svgEl.parentElement;
+  var W = parent ? (parent.clientWidth || 700) : 700;
+  var H = svgEl.clientHeight || 420;
+
+  var localNodes = nodes.map(function(n){ return Object.assign({}, n); });
+  var nodeById = {};
+  localNodes.forEach(function(n){ nodeById[n.id] = n; });
+
+  var simLinks = edges.map(function(e){
+    return Object.assign({ source: nodeById[e.source], target: nodeById[e.target] }, e);
+  }).filter(function(l){ return l.source && l.target; });
+
+  var sim = d3.forceSimulation(localNodes)
+    .force('link', d3.forceLink(simLinks).id(function(d){ return d.id; }).distance(100).strength(0.5))
+    .force('charge', d3.forceManyBody().strength(-250))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide(32));
+
+  d3.select(svgEl).selectAll('*').remove();
+  var svg = d3.select(svgEl);
+  var g   = svg.append('g');
+
+  criminalsZoom = d3.zoom().scaleExtent([0.3, 4])
+    .on('zoom', function(e){ g.attr('transform', e.transform); });
+  svg.call(criminalsZoom);
+
+  var link = g.append('g').selectAll('line')
+    .data(simLinks).enter().append('line')
+    .attr('stroke', function(d){ return edgeStroke(d.type, d.suspicious); })
+    .attr('stroke-width', 1.8)
+    .attr('stroke-opacity', 0.75);
+
+  var node = g.append('g').selectAll('g')
+    .data(localNodes).enter().append('g')
+    .style('cursor', 'pointer');
+
+  node.append('circle')
+    .attr('r', function(d){ return nodeR(d) + 5; })
+    .attr('fill', 'none')
+    .attr('stroke', function(d){ return nodeStroke(d); })
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', '3,2')
+    .attr('opacity', 0.5)
+    .attr('pointer-events', 'none');
+
+  node.append('circle')
+    .attr('r', function(d){ return nodeR(d); })
+    .attr('fill', function(d){ return nodeFill(d); })
+    .attr('stroke', function(d){ return nodeStroke(d); })
+    .attr('stroke-width', 2);
+
+  node.append('text')
+    .attr('dy', function(d){ return nodeR(d) + 13; })
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '10')
+    .attr('font-family', 'JetBrains Mono, monospace')
+    .attr('fill', '#94a3b8')
+    .attr('pointer-events', 'none')
+    .text(function(d){ return shortenName(d.label); });
+
+  sim.on('tick', function() {
+    link
+      .attr('x1', function(d){ return d.source.x; })
+      .attr('y1', function(d){ return d.source.y; })
+      .attr('x2', function(d){ return d.target.x; })
+      .attr('y2', function(d){ return d.target.y; });
+    node.attr('transform', function(d){ return 'translate(' + d.x + ',' + d.y + ')'; });
+  });
+
+  sim.alpha(1).restart();
+  setTimeout(function(){ sim.stop(); }, 4000);
+}
+
+window.openCriminalsOutput  = openCriminalsOutput;
+window.closeCriminalsOutput = closeCriminalsOutput;

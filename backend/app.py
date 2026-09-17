@@ -142,8 +142,9 @@ def load_demo():
 @app.route('/api/upload', methods=['POST'])
 def upload_csv():
     """
-    Accept a CSV file upload and return the graph.
-    Multipart form: file=<csv file>, amount_threshold=<float> (optional)
+    Accept a file upload and return the graph.
+    Supports CSV, JSON, XLS, XLSX, TXT.
+    Multipart form: file=<file>, amount_threshold=<float> (optional)
     """
     if 'file' not in request.files:
         return _error("No file provided. Send field name 'file'.")
@@ -151,12 +152,20 @@ def upload_csv():
     f          = request.files['file']
     threshold  = float(request.form.get('amount_threshold', 0))
     filename   = f.filename or 'upload.csv'
+    ext        = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
 
-    if not filename.lower().endswith('.csv'):
-        return _error("Only CSV files are supported.")
+    SUPPORTED = {'csv', 'json', 'xls', 'xlsx', 'txt'}
+    if ext not in SUPPORTED:
+        return _error(f"Unsupported file type '.{ext}'. Supported: CSV, JSON, XLS, XLSX, TXT. Convert data to CSV for best results.")
 
     try:
-        csv_text = f.read().decode('utf-8', errors='replace')
+        raw_bytes = f.read()
+        # For now, attempt UTF-8 decode (CSV path). Non-CSV types inform the user.
+        if ext in ('xls', 'xlsx'):
+            return _error("XLS/XLSX: Please export as CSV first, then re-upload.")
+        if ext == 'json':
+            return _error("JSON upload: Please convert to CSV format first, then re-upload.")
+        csv_text = raw_bytes.decode('utf-8', errors='replace')
         graph = build_graph_from_csv(csv_text, filename, threshold)
         return _ok({'graph': graph, 'filename': filename})
     except Exception as e:

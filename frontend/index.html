@@ -66,6 +66,17 @@
 
     <!-- Operational Actions -->
     <div class="navbar-actions">
+      <button class="btn btn-poi" id="btn-poi" style="display:none;" title="Open Persons of Interest Registry">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span>POI Registry</span>
+        <span class="poi-count" id="poi-count">0</span>
+      </button>
+
       <button class="btn btn-summary" id="btn-summary" style="display:none;" title="Generate Intelligence Case Dossier">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -83,6 +94,13 @@
           <line x1="12" y1="17" x2="12.01" y2="17"/>
         </svg>
         <span>Pattern Anomalies</span>
+      </button>
+
+      <button class="btn btn-criminals" id="btn-criminals-output" style="display:none;" title="View Criminals-Only Network Output">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <span>Criminals Output</span>
       </button>
 
       <button class="btn btn-ghost" id="btn-reset" style="display:none;" title="Clear Active Investigation Canvas">
@@ -114,9 +132,9 @@
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
           </div>
-          <p class="upload-text">Drop investigation CSV or <label class="upload-link" for="file-input">browse</label></p>
-          <p class="upload-hint">CDR logs, banking transactions, registry files</p>
-          <input type="file" id="file-input" accept=".csv" style="display:none;" />
+          <p class="upload-text">Drop evidence file or <label class="upload-link" for="file-input">browse</label></p>
+          <p class="upload-hint">CSV, JSON, XLS, XLSX — CDR logs, banking, registry files</p>
+          <input type="file" id="file-input" accept=".csv,.json,.xls,.xlsx,.txt" style="display:none;" />
         </div>
       </section>
 
@@ -150,7 +168,13 @@
         <div class="section-header">
           <span class="section-title">PRIMARY EVIDENCE REPOSITORY</span>
         </div>
-        <div class="dataset-list" id="dataset-list">
+        <button class="btn btn-ghost btn-block btn-prototype" id="btn-show-prototype" style="margin-bottom:8px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          <span>Show Prototype Data</span>
+        </button>
+        <div class="dataset-list" id="dataset-list" style="display:none;">
           <div class="dataset-loading">Connecting to investigation index…</div>
         </div>
       </section>
@@ -212,13 +236,8 @@
           </svg>
         </div>
         <h2 class="empty-title">NO INVESTIGATION DATA LOADED</h2>
-        <p class="empty-desc">Select an evidence source from the repository or execute multi-dataset correlation to map entities and link vectors.</p>
-        <button class="btn btn-primary" id="btn-load-all-quick">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          <span>Correlate All Repositories</span>
-        </button>
+        <p class="empty-desc">Upload an evidence file or use the sidebar controls to begin network analysis.</p>
+        <p class="empty-desc" style="font-size:12px;color:#475569;margin-top:4px;">Use <strong>Show Prototype Data</strong> in the sidebar to load sample datasets.</p>
       </div>
 
       <!-- D3 Interactive Graph Container -->
@@ -263,6 +282,38 @@
 
   </main>
 
+  <!-- Criminals-Only Output Panel -->
+  <div class="criminals-output-overlay hidden" id="criminals-output-overlay">
+    <div class="criminals-output-panel">
+      <div class="criminals-output-header">
+        <div class="criminals-output-header-left">
+          <div class="criminals-output-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="criminals-output-title">CRIMINALS NETWORK OUTPUT</div>
+            <div class="criminals-output-sub">CLASSIFIED — KNOWN CRIMINALS &amp; DIRECT LINKS ONLY</div>
+          </div>
+        </div>
+        <div class="criminals-output-header-right">
+          <span class="criminals-output-count" id="criminals-output-count">0 criminals</span>
+          <button class="detail-close" id="criminals-output-close" title="Close Panel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="criminals-output-body">
+        <!-- Criminals-only D3 graph -->
+        <svg id="criminals-graph-svg" class="criminals-graph-svg"></svg>
+        <div class="criminals-list-panel" id="criminals-list-panel"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Dossier Modal (Automated Forensic Assessment) -->
   <div class="modal-overlay hidden" id="ai-modal-overlay">
     <div class="ai-modal">
@@ -292,6 +343,61 @@
 
   <!-- Precision Graph Tooltip -->
   <div class="graph-tooltip hidden" id="graph-tooltip"></div>
+
+  <!-- POI Registry Panel (Criminals Only) -->
+  <div class="poi-overlay hidden" id="poi-overlay">
+    <div class="poi-panel">
+      <div class="poi-panel-header">
+        <div class="poi-header-left">
+          <div class="poi-header-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+          </div>
+          <div>
+            <div class="poi-panel-title">PERSONS OF INTEREST REGISTRY</div>
+            <div class="poi-panel-sub">CLASSIFIED — LAW ENFORCEMENT SENSITIVE // KNOWN CRIMINALS ONLY</div>
+          </div>
+        </div>
+        <div class="poi-header-right">
+          <div class="poi-sort-controls">
+            <span class="poi-sort-label">SORT BY</span>
+            <button class="poi-sort-btn active" id="poi-sort-risk" onclick="sortPOI('risk')">RISK</button>
+            <button class="poi-sort-btn" id="poi-sort-degree" onclick="sortPOI('degree')">LINKS</button>
+            <button class="poi-sort-btn" id="poi-sort-name" onclick="sortPOI('name')">NAME</button>
+          </div>
+          <div class="poi-search-wrap">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" class="poi-search" id="poi-search" placeholder="Search persons…" />
+          </div>
+          <button class="detail-close" id="poi-close" title="Close Registry">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="poi-stats-bar" id="poi-stats-bar">
+        <div class="poi-stat"><span class="poi-stat-val" id="poi-stat-total">0</span><span class="poi-stat-key">TOTAL POI</span></div>
+        <div class="poi-stat-sep"></div>
+        <div class="poi-stat"><span class="poi-stat-val danger" id="poi-stat-critical">0</span><span class="poi-stat-key">CRITICAL RISK</span></div>
+        <div class="poi-stat-sep"></div>
+        <div class="poi-stat"><span class="poi-stat-val warning" id="poi-stat-elevated">0</span><span class="poi-stat-key">ELEVATED RISK</span></div>
+        <div class="poi-stat-sep"></div>
+        <div class="poi-stat"><span class="poi-stat-val" id="poi-stat-stolen">0</span><span class="poi-stat-key">STOLEN ASSET LINKS</span></div>
+        <div class="poi-stat-sep"></div>
+        <div class="poi-stat"><span class="poi-stat-val accent" id="poi-stat-multi">0</span><span class="poi-stat-key">CROSS-REPO</span></div>
+      </div>
+      <div class="poi-body" id="poi-body">
+        <div class="poi-empty">Loading registry…</div>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

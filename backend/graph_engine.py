@@ -415,6 +415,46 @@ def _finalise(G: nx.Graph, persons: dict, schema: str) -> dict:
             'date_range':       data.get('date_range', None),
         })
 
+    # ── Edge reduction — keep only meaningful edges to reduce visual clutter ───
+    person_node_map = {n['id']: n for n in nodes_out}
+
+    def _edge_priority(e):
+        """Higher is more important — keep edge if score >= threshold."""
+        score = 0
+        if e.get('suspicious'):
+            score += 100          # always keep flagged edges
+        amt = e.get('total_amount') or 0
+        if amt >= 100000:
+            score += 60
+        elif amt >= 10000:
+            score += 30
+        cnt = e.get('txn_count') or 0
+        if cnt >= 5:
+            score += 20
+        elif cnt >= 2:
+            score += 10
+        n_src = person_node_map.get(e['source'], {})
+        n_tgt = person_node_map.get(e['target'], {})
+        if n_src.get('is_criminal') or n_tgt.get('is_criminal'):
+            score += 40           # always keep criminal-linked edges
+        if n_src.get('multi_source') or n_tgt.get('multi_source'):
+            score += 20
+        if e.get('type') in ('phone call', 'financial transaction', 'vehicle transfer'):
+            score += 10
+        return score
+
+    EDGE_THRESHOLD = 30  # edges below this score are pruned
+
+    # Always keep edges for nodes with degree ≤ 2 (otherwise they'd be isolated)
+    low_degree_nodes = {n['id'] for n in nodes_out if (n.get('degree') or 0) <= 2}
+
+    edges_out = [
+        e for e in edges_out
+        if _edge_priority(e) >= EDGE_THRESHOLD
+           or e['source'] in low_degree_nodes
+           or e['target'] in low_degree_nodes
+    ]
+
     # ── Cluster summaries ──────────────────────────────────────────────────────
     cluster_groups: dict = {}
     for node, cid in partition.items():
