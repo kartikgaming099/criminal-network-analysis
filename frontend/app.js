@@ -1,9 +1,7 @@
-/* ═══════════════════════════════════════════════════════════════
-   SIH26189 — Criminal Network Analysis  app.js v3
-   Fixes: layout spacing, single edge per pair, no floating amounts,
-          vehicle registration info banner, cross-file combined view,
-          suspected-networks filter, AI model errors.
-   ═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════
+   CRIMENET — Forensic Network Analysis & Link Discovery
+   Investigative Workbench Engine
+   ═══════════════════════════════════════════════════════════════════ */
 
 const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:5000/api'
@@ -17,7 +15,7 @@ let zoomBehavior = null;
 let svgSel       = null;
 let gRootSel     = null;
 
-// ── DOM ────────────────────────────────────────────────────────────────────────
+// ── DOM Elements ───────────────────────────────────────────────────────────────
 const $  = id => document.getElementById(id);
 const el = {
   overlay:      $('loading-overlay'),
@@ -48,13 +46,15 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Loading ────────────────────────────────────────────────────────────────────
-function showLoading(msg = 'Processing…') {
+function showLoading(msg = 'Processing investigation data…') {
   el.loadingMsg.textContent = msg;
   el.overlay.classList.remove('hidden');
 }
-function hideLoading() { el.overlay.classList.add('hidden'); }
+function hideLoading() {
+  el.overlay.classList.add('hidden');
+}
 
-// ── Upload ─────────────────────────────────────────────────────────────────────
+// ── Evidence Upload ────────────────────────────────────────────────────────────
 function initUpload() {
   const zone  = $('upload-zone');
   const input = $('file-input');
@@ -63,15 +63,16 @@ function initUpload() {
   zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
   zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
   zone.addEventListener('drop', e => {
-    e.preventDefault(); zone.classList.remove('dragover');
+    e.preventDefault();
+    zone.classList.remove('dragover');
     const f = e.dataTransfer.files[0];
     if (f?.name.endsWith('.csv')) uploadFile(f);
-    else showBanner('⚠ Please drop a .csv file');
+    else showBanner('Please provide a valid .csv evidence file', 'danger');
   });
 }
 
 async function uploadFile(file) {
-  showLoading(`Parsing ${file.name}…`);
+  showLoading(`Ingesting ${file.name}…`);
   const form = new FormData();
   form.append('file', file);
   form.append('amount_threshold', 0);
@@ -80,10 +81,13 @@ async function uploadFile(file) {
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     handleGraphResponse(json.graph, file.name);
-  } catch (err) { hideLoading(); showBanner('Error: ' + err.message, 'danger'); }
+  } catch (err) {
+    hideLoading();
+    showBanner('Ingestion error: ' + err.message, 'danger');
+  }
 }
 
-// ── Datasets list ──────────────────────────────────────────────────────────────
+// ── Evidence Repositories List ─────────────────────────────────────────────────
 async function loadDatasetList() {
   try {
     const res  = await fetch(`${API}/datasets`);
@@ -103,14 +107,14 @@ async function loadDatasetList() {
       el.datasetList.appendChild(div);
     });
   } catch {
-    el.datasetList.innerHTML = '<div class="dataset-loading">⚠ Backend offline — run python backend/app.py</div>';
+    el.datasetList.innerHTML = '<div class="dataset-loading">Investigation service offline — verify backend service is active</div>';
   }
 }
 
 async function loadSingleDemo(key, itemEl) {
   document.querySelectorAll('.dataset-item').forEach(e => e.classList.remove('active'));
   itemEl?.classList.add('active');
-  showLoading('Loading dataset…');
+  showLoading('Loading evidence repository…');
   try {
     const res  = await fetch(`${API}/load-demo`, {
       method: 'POST',
@@ -120,14 +124,17 @@ async function loadSingleDemo(key, itemEl) {
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     handleGraphResponse(json.graph, json.filename);
-  } catch (err) { hideLoading(); showBanner('Error: ' + err.message, 'danger'); }
+  } catch (err) {
+    hideLoading();
+    showBanner('Correlation error: ' + err.message, 'danger');
+  }
 }
 
 async function loadAllFiles(suspectedOnly = false) {
   document.querySelectorAll('.dataset-item').forEach(e => e.classList.remove('active'));
   showLoading(suspectedOnly
-    ? 'Filtering suspected networks across all files…'
-    : 'Loading all datasets and finding cross-file links…');
+    ? 'Isolating suspect subnets across evidence repositories…'
+    : 'Correlating multi-source evidence repositories…');
   try {
     const res  = await fetch(`${API}/load-all-demos`, {
       method: 'POST',
@@ -136,56 +143,74 @@ async function loadAllFiles(suspectedOnly = false) {
     });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
-    handleGraphResponse(json.graph, suspectedOnly ? 'Suspected Networks (All Files)' : 'All Files Combined');
-  } catch (err) { hideLoading(); showBanner('Error: ' + err.message, 'danger'); }
+    handleGraphResponse(json.graph, suspectedOnly ? 'Suspect Subnets (Correlated)' : 'Multi-Source Correlation');
+  } catch (err) {
+    hideLoading();
+    showBanner('Multi-source analysis error: ' + err.message, 'danger');
+  }
 }
 
-// ── Graph response handler ──────────────────────────────────────────────────────
+// ── Graph Response Handler ─────────────────────────────────────────────────────
 function handleGraphResponse(graph, filename) {
   hideLoading();
   hideBanner();
 
-  // Vehicle registrations alone: no network to show — just inform user
   if (graph.message === 'vehicle_registrations_only') {
-    showBanner('ℹ Vehicle registration data loaded. Use "Load All Files Together" to see it in context of the full network.', 'info');
+    showBanner('Vehicle registry records loaded. Execute "Correlate All Repositories" to link against call logs and financial ledgers.', 'info');
     hideLoading();
     return;
   }
 
   if (!graph.nodes || graph.nodes.length === 0) {
-    showBanner('No person nodes found in this file. Try a different dataset or load all files.', 'info');
+    showBanner('No entity nodes detected in this evidence file. Select an alternate source or execute correlation.', 'info');
     return;
   }
 
   renderGraph(graph, filename);
 }
 
-// ── Info banner ────────────────────────────────────────────────────────────────
+// ── Operational Banner ─────────────────────────────────────────────────────────
 function showBanner(text, type = 'info') {
   el.infoBannerTxt.textContent = text;
   el.infoBanner.classList.remove('hidden');
-  el.infoBanner.style.borderColor = type === 'danger' ? 'rgba(239,68,68,0.4)' : 'rgba(59,130,246,0.35)';
+  el.infoBanner.style.borderColor = type === 'danger' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(59, 130, 246, 0.35)';
 }
-function hideBanner() { el.infoBanner.classList.add('hidden'); }
+function hideBanner() {
+  el.infoBanner.classList.add('hidden');
+}
 
-// ── Colour helpers ─────────────────────────────────────────────────────────────
+// ── Taxonomy Palette ───────────────────────────────────────────────────────────
 const EDGE_COLORS = {
   'phone call':            '#38bdf8',
-  'shared bank account':   '#facc15',
-  'financial transaction': '#34d399',
-  'vehicle transfer':      '#fb923c',
-  'same criminal cluster': '#a78bfa',
+  'shared bank account':   '#eab308',
+  'financial transaction': '#10b981',
+  'vehicle transfer':      '#f97316',
+  'same criminal cluster': '#8b5cf6',
   'connected':             '#64748b',
 };
+
 function edgeStroke(type, suspicious) {
-  if (suspicious) return '#f87171';
+  if (suspicious) return '#ef4444';
   return EDGE_COLORS[type] || '#64748b';
 }
-function nodeFill(node)   { return node.is_criminal ? (node.has_stolen_vehicle ? '#7c2d12' : '#7f1d1d') : '#1e3a5f'; }
-function nodeStroke(node) { return node.is_criminal ? (node.has_stolen_vehicle ? '#f97316' : '#ef4444') : '#60a5fa'; }
-function nodeR(node)      { return 14 + Math.min(11, Math.sqrt(node.degree || 0) * 3); }
 
-// ── Main render ────────────────────────────────────────────────────────────────
+function nodeFill(node) {
+  return node.is_criminal
+    ? (node.has_stolen_vehicle ? '#450a0a' : '#581c87' === '#581c87' ? '#7f1d1d' : '#7f1d1d')
+    : '#0c2444';
+}
+
+function nodeStroke(node) {
+  return node.is_criminal
+    ? (node.has_stolen_vehicle ? '#f97316' : '#ef4444')
+    : '#38bdf8';
+}
+
+function nodeR(node) {
+  return 13 + Math.min(10, Math.sqrt(node.degree || 0) * 2.8);
+}
+
+// ── Main Graph Visualizer ──────────────────────────────────────────────────────
 function renderGraph(data, filename) {
   graphData    = data;
   activeNodeId = null;
@@ -208,34 +233,30 @@ function renderGraph(data, filename) {
   const W = wrapper.clientWidth  || 900;
   const H = wrapper.clientHeight || 700;
 
-  // Backend uses 3000×3000 canvas — scale to fit viewport on first load
   const BACKEND_CANVAS = 3000;
   const initScale = Math.min((W * 0.9) / BACKEND_CANVAS, (H * 0.9) / BACKEND_CANVAS);
 
-  // Build node map with screen coordinates
   const nodes = data.nodes.map(n => ({ ...n }));
   const nodeMap = {};
   nodes.forEach(n => { nodeMap[n.id] = n; });
 
-  // ── SVG setup ──────────────────────────────────────────────────
+  // SVG Layers
   svgSel   = d3.select('#graph-svg');
   gRootSel = d3.select('#graph-root');
   gRootSel.selectAll('*').remove();
 
-  // Layers
   const gClusters = gRootSel.append('g').attr('class', 'layer-clusters');
   const gEdges    = gRootSel.append('g').attr('class', 'layer-edges');
   const gNodes    = gRootSel.append('g').attr('class', 'layer-nodes');
   const gLabels   = gRootSel.append('g').attr('class', 'layer-labels');
 
-  // Cluster colours (12 distinct)
   const CLUSTER_COLORS = [
-    '#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6',
-    '#06b6d4','#ec4899','#14b8a6','#f97316','#6366f1',
-    '#84cc16','#d946ef',
+    '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+    '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
+    '#84cc16', '#d946ef',
   ];
 
-  // ── Cluster halos ──────────────────────────────────────────────
+  // Syndicate Boundary Boundaries
   data.clusters.forEach(cluster => {
     if (cluster.size < 2) return;
     const members = cluster.members.map(id => nodeMap[id]).filter(Boolean);
@@ -244,27 +265,30 @@ function renderGraph(data, filename) {
     const cx   = members.reduce((s, n) => s + n.x, 0) / members.length;
     const cy   = members.reduce((s, n) => s + n.y, 0) / members.length;
     const maxR = Math.max(...members.map(n => Math.hypot(n.x - cx, n.y - cy)));
-    const haloR = maxR + 40;
+    const haloR = maxR + 38;
     const hue  = CLUSTER_COLORS[cluster.id % CLUSTER_COLORS.length];
 
     gClusters.append('circle')
       .attr('cx', cx).attr('cy', cy).attr('r', haloR)
-      .attr('fill', hexAlpha(hue, 0.05))
-      .attr('stroke', hexAlpha(hue, 0.22))
-      .attr('stroke-width', 1.5)
-      .attr('stroke-dasharray', '6,4')
+      .attr('fill', hexAlpha(hue, 0.04))
+      .attr('stroke', hexAlpha(hue, 0.25))
+      .attr('stroke-width', 1.2)
+      .attr('stroke-dasharray', '5, 4')
       .attr('class', 'cluster-halo');
 
     gClusters.append('text')
       .attr('x', cx).attr('y', cy - haloR - 8)
       .attr('text-anchor', 'middle')
-      .attr('font-size', '11').attr('font-family', 'Outfit,sans-serif')
-      .attr('font-weight', '600').attr('fill', hexAlpha(hue, 0.5))
+      .attr('font-size', '10')
+      .attr('font-family', 'JetBrains Mono, monospace')
+      .attr('font-weight', '600')
+      .attr('letter-spacing', '0.08em')
+      .attr('fill', hexAlpha(hue, 0.65))
       .attr('pointer-events', 'none')
-      .text(`Network ${cluster.id}`);
+      .text(`SYNDICATE #${cluster.id}`);
   });
 
-  // ── Edges ──────────────────────────────────────────────────────
+  // Link Vectors
   const edges = data.edges.filter(e => nodeMap[e.source] && nodeMap[e.target]);
 
   gEdges.selectAll('.edge-line')
@@ -277,8 +301,8 @@ function renderGraph(data, filename) {
     .attr('y2', d => nodeMap[d.target].y)
     .attr('stroke', d => edgeStroke(d.type, d.suspicious))
     .attr('stroke-width', d => {
-      const base = 2;
-      const bonus = d.total_amount ? Math.min(4, d.total_amount / 50000) : 0;
+      const base = 1.8;
+      const bonus = d.total_amount ? Math.min(3, d.total_amount / 60000) : 0;
       return base + bonus;
     })
     .on('mouseenter', (ev, d) => showTooltip(ev, edgeTip(d)))
@@ -286,7 +310,7 @@ function renderGraph(data, filename) {
     .on('mouseleave', hideTooltip)
     .on('click', (ev, d) => { ev.stopPropagation(); onEdgeClick(d, nodeMap); });
 
-  // ── Nodes ──────────────────────────────────────────────────────
+  // Entity Nodes
   const nodeSel = gNodes.selectAll('.node-g')
     .data(nodes).enter()
     .append('g')
@@ -298,49 +322,49 @@ function renderGraph(data, filename) {
     .on('mouseleave', hideTooltip)
     .on('click', (ev, d) => { ev.stopPropagation(); onNodeClick(d, edges, nodeMap); });
 
-  // Glow ring for criminals
+  // Tactical Surveillance Indicator for Known Criminals / POIs
   nodeSel.filter(d => d.is_criminal)
     .append('circle')
-    .attr('r', d => nodeR(d) + 7)
+    .attr('r', d => nodeR(d) + 6)
     .attr('fill', 'none')
     .attr('stroke', d => nodeStroke(d))
     .attr('stroke-width', 1.2)
-    .attr('opacity', 0.3)
+    .attr('stroke-dasharray', '3, 2')
+    .attr('opacity', 0.5)
     .attr('pointer-events', 'none');
 
-  // Main circle
+  // Solid Core Node
   nodeSel.append('circle')
     .attr('class', 'node-circle')
     .attr('r', d => nodeR(d))
     .attr('fill', d => nodeFill(d))
     .attr('stroke', d => nodeStroke(d))
-    .attr('stroke-width', 2.5);
+    .attr('stroke-width', 2.2);
 
-  // Multi-source indicator (cross-file)
+  // Multi-Repository Correlated Badge
   nodeSel.filter(d => d.multi_source)
     .append('circle')
-    .attr('r', 5).attr('cx', d => nodeR(d) - 4).attr('cy', d => -nodeR(d) + 4)
-    .attr('fill', '#facc15').attr('stroke', '#0c1220').attr('stroke-width', 1.5)
+    .attr('r', 4.5).attr('cx', d => nodeR(d) - 3).attr('cy', d => -nodeR(d) + 3)
+    .attr('fill', '#eab308').attr('stroke', '#080c14').attr('stroke-width', 1.5)
     .attr('pointer-events', 'none');
 
-  // ── Labels ─────────────────────────────────────────────────────
+  // Node Labels
   gLabels.selectAll('.node-label')
     .data(nodes).enter()
     .append('text')
     .attr('class', 'node-label')
     .attr('x', d => d.x)
-    .attr('y', d => d.y + nodeR(d) + 15)
+    .attr('y', d => d.y + nodeR(d) + 14)
     .attr('data-id', d => d.id)
     .text(d => shortenName(d.label));
 
-  // ── Zoom ───────────────────────────────────────────────────────
+  // Zoom & Pan System
   zoomBehavior = d3.zoom()
     .scaleExtent([0.05, 6])
     .on('zoom', e => gRootSel.attr('transform', e.transform));
 
   svgSel.call(zoomBehavior);
 
-  // Initial transform: fit entire graph into view
   const initTransform = d3.zoomIdentity
     .translate(W / 2, H / 2)
     .scale(initScale)
@@ -350,7 +374,7 @@ function renderGraph(data, filename) {
   svgSel.on('click', () => { clearHighlights(); closeDetailPanel(); });
 }
 
-// ── Node click ─────────────────────────────────────────────────────────────────
+// ── Node Click Handler ─────────────────────────────────────────────────────────
 function onNodeClick(node, edges, nodeMap) {
   activeNodeId = node.id;
   activeEdge   = null;
@@ -358,54 +382,56 @@ function onNodeClick(node, edges, nodeMap) {
   const connIds   = new Set(connEdges.map(e => e.source === node.id ? e.target : e.source));
 
   d3.selectAll('.edge-line')
-    .attr('opacity', d => (d.source === node.id || d.target === node.id) ? 1 : 0.08)
+    .attr('opacity', d => (d.source === node.id || d.target === node.id) ? 1 : 0.06)
     .classed('highlighted', d => d.source === node.id || d.target === node.id);
 
   d3.selectAll('.node-circle')
-    .attr('stroke-width', d => d.id === node.id ? 4.5 : 2.5)
-    .attr('r', d => d.id === node.id ? nodeR(d) + 4 : nodeR(d))
-    .attr('opacity', d => (d.id === node.id || connIds.has(d.id)) ? 1 : 0.25);
+    .attr('stroke-width', d => d.id === node.id ? 4 : 2.2)
+    .attr('r', d => d.id === node.id ? nodeR(d) + 3 : nodeR(d))
+    .attr('opacity', d => (d.id === node.id || connIds.has(d.id)) ? 1 : 0.2);
 
   d3.selectAll('.node-label').classed('selected', d => d.id === node.id);
 
   openDetailPanel('node', node, connEdges, nodeMap);
 }
 
-// ── Edge click ─────────────────────────────────────────────────────────────────
+// ── Edge Click Handler ─────────────────────────────────────────────────────────
 function onEdgeClick(edge, nodeMap) {
   activeEdge   = edge;
   activeNodeId = null;
 
   d3.selectAll('.edge-line')
-    .attr('opacity', d => (d.source === edge.source && d.target === edge.target) ? 1 : 0.06);
+    .attr('opacity', d => (d.source === edge.source && d.target === edge.target) ? 1 : 0.05);
   d3.selectAll('.node-circle')
     .attr('opacity', d => (d.id === edge.source || d.id === edge.target) ? 1 : 0.15);
 
   openDetailPanel('edge', edge, [], nodeMap);
 }
 
-// ── Clear highlights ───────────────────────────────────────────────────────────
+// ── Clear Canvas Selections ───────────────────────────────────────────────────
 function clearHighlights() {
-  activeNodeId = null; activeEdge = null;
+  activeNodeId = null;
+  activeEdge   = null;
   d3.selectAll('.edge-line').attr('opacity', null).classed('highlighted', false);
-  d3.selectAll('.node-circle').attr('opacity', null).attr('r', d => nodeR(d)).attr('stroke-width', 2.5);
+  d3.selectAll('.node-circle').attr('opacity', null).attr('r', d => nodeR(d)).attr('stroke-width', 2.2);
   d3.selectAll('.node-label').classed('selected', false);
 }
 
-// ── Detail panel ───────────────────────────────────────────────────────────────
+// ── Inspector Detail Panel ─────────────────────────────────────────────────────
 function openDetailPanel(type, data, connEdges, nodeMap) {
   el.detailPanel.classList.add('open');
   type === 'node'
     ? renderNodeDetail(data, connEdges, nodeMap)
     : renderEdgeDetail(data, nodeMap);
 }
+
 function closeDetailPanel() {
   el.detailPanel.classList.remove('open');
   el.detailBody.innerHTML = '';
 }
 $('detail-close').addEventListener('click', () => { clearHighlights(); closeDetailPanel(); });
 
-// ── Node detail ────────────────────────────────────────────────────────────────
+// ── Node Inspector ─────────────────────────────────────────────────────────────
 function renderNodeDetail(node, connEdges, nodeMap) {
   el.detailTitle.textContent = node.label;
   const d = node.details || {};
@@ -415,136 +441,136 @@ function renderNodeDetail(node, connEdges, nodeMap) {
 
   let h = `<div class="fade-in">`;
 
-  // Badges
-  h += `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;">`;
-  if (node.is_criminal) h += badge('⚠ Known Criminal', 'suspicious');
-  else                  h += badge('Civilian', 'default');
-  if (node.has_stolen_vehicle) h += badge('🚗 Stolen Vehicle', 'vehicle');
-  if (node.multi_source)       h += badge('🔗 Cross-file link', 'cluster');
+  // Classification Badges
+  h += `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">`;
+  if (node.is_criminal) h += badge('PRIORITY POI', 'suspicious');
+  else                  h += badge('CIVILIAN / ASSOCIATE', 'default');
+  if (node.has_stolen_vehicle) h += badge('STOLEN ASSET LINK', 'vehicle');
+  if (node.multi_source)       h += badge('CROSS-REPO CORRELATED', 'cluster');
   edgeTypes.forEach(t => h += badge(t, tagCls(t)));
   h += `</div>`;
 
-  // Risk
+  // Risk Assessment
   h += `<div class="detail-section">
-    <div class="detail-section-title">Risk Assessment</div>
-    <div class="detail-row" style="margin-bottom:8px;">
-      <span class="detail-key">Level</span>
-      <strong style="color:${risk.color};">${risk.level} — ${risk.score}/100</strong>
+    <div class="detail-section-title">THREAT &amp; INVOLVEMENT MATRIX</div>
+    <div class="detail-row" style="margin-bottom:6px;">
+      <span class="detail-key">Risk Rating</span>
+      <strong style="color:${risk.color};font-family:var(--font-mono);">${risk.level} // ${risk.score}/100</strong>
     </div>
     <div class="risk-bar-track"><div class="risk-bar-fill" style="width:${risk.score}%;background:${risk.color};"></div></div>
-    <div style="margin-top:6px;">${risk.factors.map(f => `<div style="font-size:11px;color:#64748b;padding:1px 0;">• ${f}</div>`).join('')}</div>
+    <div style="margin-top:6px;">${risk.factors.map(f => `<div style="font-size:11px;color:#94a3b8;padding:1px 0;">• ${f}</div>`).join('')}</div>
   </div>`;
 
-  // Person info
-  h += `<div class="detail-section"><div class="detail-section-title">Person Details</div>`;
+  // Identity & Record Profile
+  h += `<div class="detail-section"><div class="detail-section-title">IDENTITY &amp; RECORD PROFILE</div>`;
   [
-    ['ID',           d.person_id    || d.Mobile_Number],
-    ['Bank Account', d.account_no   || d.Bank_Account],
-    ['Bank',         d.bank],
-    ['Account Type', d.account_type],
-    ['IFSC',         d.ifsc],
-    ['Network',      d.cluster !== undefined ? `Network ${d.cluster}` : `Network ${node.cluster}`],
-    ['Connections',  node.degree],
-    ['Data sources', (node.sources || []).join(', ')],
+    ['Subject ID',      d.person_id    || d.Mobile_Number],
+    ['Bank Account',    d.account_no   || d.Bank_Account],
+    ['Banking Entity',  d.bank],
+    ['Account Class',   d.account_type],
+    ['Routing / IFSC',  d.ifsc],
+    ['Syndicate Subnet',d.cluster !== undefined ? `Syndicate #${d.cluster}` : `Syndicate #${node.cluster}`],
+    ['Direct Linkages', node.degree],
+    ['Evidence Sources',(node.sources || []).join(', ')],
   ].forEach(([k, v]) => {
     if (v != null && String(v) !== 'nan' && String(v).trim()) {
-      h += `<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val mono">${v}</span></div>`;
+      h += `<div class="detail-row"><span class="detail-key">${k}</span><span class="detail-val">${v}</span></div>`;
     }
   });
   h += `</div>`;
 
-  // Vehicles
+  // Vehicle Assets
   if (d.vehicles?.length) {
-    h += `<div class="detail-section"><div class="detail-section-title">Vehicles (${d.vehicles.length})</div>`;
+    h += `<div class="detail-section"><div class="detail-section-title">MOTOR VEHICLE ASSETS (${d.vehicles.length})</div>`;
     d.vehicles.forEach(v => {
       h += `<div class="vehicle-item">
         <div><span class="reg">${v.reg_no}</span>${v.status === 'Stolen' ? '<span class="stolen-badge">STOLEN</span>' : ''}</div>
-        <div style="color:#64748b;margin-top:2px;">${v.make} · ${v.colour}</div>
-        ${v.theft_date && v.theft_date !== 'nan' ? `<div style="color:#ef4444;font-size:10px;margin-top:2px;">Theft date: ${v.theft_date}</div>` : ''}
+        <div style="color:#94a3b8;margin-top:2px;">${v.make} · ${v.colour}</div>
+        ${v.theft_date && v.theft_date !== 'nan' ? `<div style="color:#f87171;font-size:10px;margin-top:2px;font-family:var(--font-mono);">Incident Date: ${v.theft_date}</div>` : ''}
       </div>`;
     });
     h += `</div>`;
   }
 
-  // Connections — show amount for financial edges
+  // Correlated Connections
   if (connIds.length) {
-    h += `<div class="detail-section"><div class="detail-section-title">Connections (${connIds.length})</div>`;
+    h += `<div class="detail-section"><div class="detail-section-title">RECORDED AFFILIATIONS (${connIds.length})</div>`;
     connIds.slice(0, 10).forEach(pid => {
       const p    = nodeMap[pid] || { id: pid };
       const edge = connEdges.find(e => e.source === pid || e.target === pid);
-      const amt  = edge?.total_amount ? `<span style="color:#34d399;font-family:monospace;font-size:11px;">  ₹${Math.round(edge.total_amount).toLocaleString('en-IN')}</span>` : '';
-      const cnt  = edge?.txn_count    ? `<span style="font-size:10px;color:#64748b;"> (${edge.txn_count} txn)</span>` : '';
+      const amt  = edge?.total_amount ? `<span style="color:#10b981;font-family:monospace;font-size:11px;"> ₹${Math.round(edge.total_amount).toLocaleString('en-IN')}</span>` : '';
+      const cnt  = edge?.txn_count    ? `<span style="font-size:10px;color:#64748b;"> (${edge.txn_count} txns)</span>` : '';
       h += `<div class="detail-row" style="align-items:center;">
-        <span class="detail-key" style="${p.is_criminal ? 'color:#ef4444;' : ''}">${p.is_criminal ? '⚠ ' : ''}${pid}</span>
-        <span>${badge(edge?.type || '?', tagCls(edge?.type))}${amt}${cnt}</span>
+        <span class="detail-key" style="${p.is_criminal ? 'color:#f87171;' : ''}">${p.is_criminal ? '[POI] ' : ''}${pid}</span>
+        <span>${badge(edge?.type || 'link', tagCls(edge?.type))}${amt}${cnt}</span>
       </div>`;
     });
-    if (connIds.length > 10) h += `<div style="font-size:11px;color:#64748b;margin-top:3px;">+${connIds.length - 10} more</div>`;
+    if (connIds.length > 10) h += `<div style="font-size:11px;color:#64748b;margin-top:3px;font-family:var(--font-mono);">+${connIds.length - 10} additional links</div>`;
     h += `</div>`;
   }
 
-  // AI buttons
+  // Syndicate Assessment Trigger
   const cluster = graphData?.clusters?.find(c => c.id === node.cluster);
   if (cluster && cluster.size > 1) {
-    h += `<button class="btn btn-ai" style="width:100%;justify-content:center;" onclick="analyzeCluster(${node.cluster})">
-      🤖 Analyse Network ${node.cluster} with Groq AI
+    h += `<button class="btn btn-dossier" onclick="analyzeCluster(${node.cluster})">
+      Compile Syndicate Dossier (Net #${node.cluster})
     </button>`;
   }
   h += `</div>`;
   el.detailBody.innerHTML = h;
 }
 
-// ── Edge detail ────────────────────────────────────────────────────────────────
+// ── Edge Inspector ─────────────────────────────────────────────────────────────
 function renderEdgeDetail(edge, nodeMap) {
-  el.detailTitle.textContent = 'Connection';
+  el.detailTitle.textContent = 'Relationship Link';
   const na = nodeMap[edge.source] || { id: edge.source };
   const nb = nodeMap[edge.target] || { id: edge.target };
 
   let h = `<div class="fade-in">`;
 
   h += `<div class="detail-section">
-    <div class="detail-section-title">Persons Connected</div>
+    <div class="detail-section-title">CORRELATED ENTITIES</div>
     ${personRow(na, edge.source)}
-    <div style="text-align:center;color:#4e637d;font-size:11px;padding:4px 0;">↕ via ${edge.type}</div>
+    <div style="text-align:center;color:#64748b;font-size:10.5px;padding:4px 0;font-family:var(--font-mono);">↔ ${edge.type.toUpperCase()} ↔</div>
     ${personRow(nb, edge.target)}
   </div>`;
 
-  // Amount box for financial
+  // Financial Ledger Audit
   if (edge.total_amount) {
     const dr = edge.date_range || [];
     h += `<div class="detail-section">
-      <div class="detail-section-title">Financial Summary</div>
-      <div style="padding:10px;background:#0e1828;border:1px solid rgba(52,211,153,0.25);border-radius:8px;text-align:center;">
-        <div style="font-size:11px;color:#64748b;margin-bottom:4px;">Total transferred</div>
-        <div style="font-size:22px;font-weight:800;color:#34d399;font-family:'JetBrains Mono',monospace;">
+      <div class="detail-section-title">TRANSACTION LEDGER AUDIT</div>
+      <div style="padding:10px;background:#0a0f1a;border:1px solid rgba(16,185,129,0.3);border-radius:6px;text-align:center;">
+        <div style="font-size:10px;font-family:var(--font-mono);color:#94a3b8;letter-spacing:0.06em;margin-bottom:2px;">AGGREGATE CAPITAL TRANSFERRED</div>
+        <div style="font-size:20px;font-weight:700;color:#10b981;font-family:'JetBrains Mono',monospace;">
           ₹${Math.round(edge.total_amount).toLocaleString('en-IN')}
         </div>
-        <div style="font-size:11px;color:#64748b;margin-top:4px;">
+        <div style="font-size:10.5px;color:#64748b;margin-top:3px;font-family:var(--font-mono);">
           ${edge.txn_count} transaction${edge.txn_count > 1 ? 's' : ''}
-          ${dr[0] ? ` · ${dr[0]} to ${dr[1]}` : ''}
+          ${dr[0] ? ` // ${dr[0]} to ${dr[1]}` : ''}
         </div>
       </div>
     </div>`;
   }
 
   h += `<div class="detail-section">
-    <div class="detail-section-title">Connection Type</div>
+    <div class="detail-section-title">RELATIONSHIP TAXONOMY</div>
     ${badge(edge.type, tagCls(edge.type))}
-    ${edge.suspicious ? badge('⚠ SUSPICIOUS', 'suspicious') : ''}
+    ${edge.suspicious ? badge('FLAGGED SUSPICIOUS', 'suspicious') : ''}
   </div>`;
 
-  // Evidence
+  // Documentary Evidence
   const descs = edge.all_descriptions || [edge.description];
   h += `<div class="detail-section">
-    <div class="detail-section-title">Evidence (${descs.length} record${descs.length > 1 ? 's' : ''})</div>`;
+    <div class="detail-section-title">DOCUMENTARY EVIDENCE (${descs.length} RECORD${descs.length > 1 ? 'S' : ''})</div>`;
   descs.slice(0, 5).forEach(d => {
-    h += `<div style="font-size:11px;color:#94a3b8;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.06);">${d}</div>`;
+    h += `<div style="font-size:11px;color:#94a3b8;padding:4px 0;border-bottom:1px solid var(--border-subtle);">${d}</div>`;
   });
-  if (descs.length > 5) h += `<div style="font-size:11px;color:#4e637d;margin-top:3px;">+${descs.length - 5} more</div>`;
+  if (descs.length > 5) h += `<div style="font-size:10.5px;color:#64748b;margin-top:3px;font-family:var(--font-mono);">+${descs.length - 5} additional records</div>`;
   h += `</div>`;
 
-  h += `<button class="btn btn-ai" style="width:100%;justify-content:center;" onclick="explainEdge('${edge.source}','${edge.target}')">
-    🤖 Explain connection with Groq AI
+  h += `<button class="btn btn-dossier" onclick="explainEdge('${edge.source}','${edge.target}')">
+    Generate Relationship Link Assessment
   </button>`;
 
   h += `</div>`;
@@ -553,14 +579,14 @@ function renderEdgeDetail(edge, nodeMap) {
 
 function personRow(node, name) {
   return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">
-    <div style="width:9px;height:9px;border-radius:50%;background:${nodeStroke(node)};flex-shrink:0;"></div>
-    <span style="font-size:13px;font-weight:600;color:${node.is_criminal ? '#ef4444' : '#e2e8f0'};">${name}</span>
-    ${node.is_criminal ? badge('Criminal','suspicious') : ''}
-    ${node.has_stolen_vehicle ? badge('Stolen Veh.','vehicle') : ''}
+    <div style="width:8px;height:8px;border-radius:50%;background:${nodeStroke(node)};flex-shrink:0;"></div>
+    <span style="font-size:12.5px;font-weight:600;color:${node.is_criminal ? '#f87171' : '#f1f5f9'};">${name}</span>
+    ${node.is_criminal ? badge('POI','suspicious') : ''}
+    ${node.has_stolen_vehicle ? badge('STOLEN ASSET','vehicle') : ''}
   </div>`;
 }
 
-// ── AI: Cluster analysis ───────────────────────────────────────────────────────
+// ── Automated Syndicate Assessment ─────────────────────────────────────────────
 async function analyzeCluster(clusterId) {
   if (!graphData) return;
   const cluster = graphData.clusters.find(c => c.id === clusterId);
@@ -570,7 +596,7 @@ async function analyzeCluster(clusterId) {
   const nodeMap = {};
   graphData.nodes.forEach(n => { nodeMap[n.id] = n; });
 
-  showAiModal(`Analysing Network ${clusterId}…`);
+  showAiModal(`Synthesizing Syndicate Assessment (Network #${clusterId})…`);
   try {
     const res  = await fetch(`${API}/analyze/cluster`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -584,23 +610,31 @@ async function analyzeCluster(clusterId) {
     if (json.error) throw new Error(json.error);
     const a = json.analysis;
     el.aiBody.innerHTML = `<div class="fade-in">
-      <div class="ai-section"><div class="ai-section-label">Network ${clusterId} — ${cluster.size} persons</div>
-        <div class="ai-section-value highlight">🔴 ${a.crime_type || 'Under analysis'}</div></div>
-      <div class="ai-section"><div class="ai-section-label">Suspected Ringleader</div>
-        <div class="ai-section-value">👤 ${a.ringleader || '—'}</div></div>
-      <div class="ai-section"><div class="ai-section-label">Primary Red Flag</div>
-        <div class="ai-section-value danger">⚠ ${a.red_flag || '—'}</div></div>
-      ${a.leads?.length ? `<div class="ai-section"><div class="ai-section-label">Investigation Leads</div>
+      <div class="ai-section">
+        <div class="ai-section-label">Syndicate Classification — Subnet #${clusterId} (${cluster.size} Associated Entities)</div>
+        <div class="ai-section-value highlight">${a.crime_type || 'Syndicate classification in progress'}</div>
+      </div>
+      <div class="ai-section">
+        <div class="ai-section-label">Primary Person of Interest / Key Facilitator</div>
+        <div class="ai-section-value mono">${a.ringleader || 'Undetermined'}</div>
+      </div>
+      <div class="ai-section">
+        <div class="ai-section-label">Primary Evidence Indicator / Risk Factor</div>
+        <div class="ai-section-value danger">${a.red_flag || 'None recorded'}</div>
+      </div>
+      ${a.leads?.length ? `<div class="ai-section">
+        <div class="ai-section-label">Investigative Directives</div>
         <div class="ai-section-value" style="padding:0;">
           ${a.leads.map((l,i) => `<div class="ai-lead"><span class="ai-lead-num">${i+1}</span><span>${l}</span></div>`).join('')}
-        </div></div>` : ''}
+        </div>
+      </div>` : ''}
     </div>`;
   } catch (err) {
-    el.aiBody.innerHTML = `<div style="color:#ef4444;padding:12px;">Error: ${err.message}</div>`;
+    el.aiBody.innerHTML = `<div style="color:#f87171;padding:12px;font-family:var(--font-mono);">Analysis service error: ${err.message}</div>`;
   }
 }
 
-// ── AI: Edge explanation ───────────────────────────────────────────────────────
+// ── Automated Link Assessment ──────────────────────────────────────────────────
 async function explainEdge(src, tgt) {
   if (!graphData) return;
   const edge = graphData.edges.find(e =>
@@ -608,7 +642,7 @@ async function explainEdge(src, tgt) {
   const nodeMap = {};
   graphData.nodes.forEach(n => { nodeMap[n.id] = n; });
 
-  showAiModal(`Analysing: ${src} ↔ ${tgt}`);
+  showAiModal(`Evaluating Link Assessment: ${src} ↔ ${tgt}…`);
   try {
     const res  = await fetch(`${API}/analyze/edge`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -623,18 +657,20 @@ async function explainEdge(src, tgt) {
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     el.aiBody.innerHTML = `<div class="fade-in">
-      <div class="ai-section"><div class="ai-section-label">Relationship: ${src} ↔ ${tgt}</div>
-        <div class="ai-section-value">${json.explanation}</div></div>
+      <div class="ai-section">
+        <div class="ai-section-label">Forensic Relationship Correlation: ${src} ↔ ${tgt}</div>
+        <div class="ai-section-value">${json.explanation}</div>
+      </div>
     </div>`;
   } catch (err) {
-    el.aiBody.innerHTML = `<div style="color:#ef4444;padding:12px;">Error: ${err.message}</div>`;
+    el.aiBody.innerHTML = `<div style="color:#f87171;padding:12px;font-family:var(--font-mono);">Link assessment error: ${err.message}</div>`;
   }
 }
 
-// ── AI: Anomaly scan ───────────────────────────────────────────────────────────
+// ── Automated Anomaly Detection ────────────────────────────────────────────────
 $('btn-anomalies').addEventListener('click', async () => {
   if (!graphData) return;
-  showAiModal('Running anomaly scan…');
+  showAiModal('Executing Network Anomaly & Discrepancy Scan…');
   try {
     const res  = await fetch(`${API}/analyze/anomalies`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -643,19 +679,21 @@ $('btn-anomalies').addEventListener('click', async () => {
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     el.aiBody.innerHTML = `<div class="fade-in">
-      <div class="ai-section"><div class="ai-section-label">🔍 Network Anomaly Report</div>
-        <div class="ai-section-value pre">${json.anomaly_report}</div></div>
+      <div class="ai-section">
+        <div class="ai-section-label">Network Discrepancy &amp; Outlier Report</div>
+        <div class="ai-section-value pre mono">${json.anomaly_report}</div>
+      </div>
     </div>`;
   } catch (err) {
-    el.aiBody.innerHTML = `<div style="color:#ef4444;padding:12px;">Error: ${err.message}</div>`;
+    el.aiBody.innerHTML = `<div style="color:#f87171;padding:12px;font-family:var(--font-mono);">Anomaly scan error: ${err.message}</div>`;
   }
 });
 
-// ── AI: Case Summary ───────────────────────────────────────────────────────────
+// ── Case Briefing Dossier ──────────────────────────────────────────────────────
 $('btn-summary').addEventListener('click', async () => {
   if (!graphData) return;
-  if (el.aiTitle) el.aiTitle.textContent = 'Case Summary — Groq AI';
-  showAiModal('Building full case summary…');
+  if (el.aiTitle) el.aiTitle.textContent = 'EXECUTIVE CASE INTELLIGENCE BRIEFING';
+  showAiModal('Synthesizing Case Dossier & Intelligence Directives…');
   try {
     const res  = await fetch(`${API}/analyze/summary`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -675,46 +713,46 @@ $('btn-summary').addEventListener('click', async () => {
         : '';
 
     el.aiBody.innerHTML = `<div class="fade-in">
-      ${s.title ? `<div style="font-size:17px;font-weight:700;color:#e2e8f0;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.08);">📁 ${s.title}</div>` : ''}
-      ${sec('Case Overview',          s.overview,           'highlight')}
-      ${sec('Network Breakdown',      s.network_breakdown)}
-      ${sec('Cross-Network Links',    s.cross_network)}
-      ${sec('Key Suspects',           s.key_suspects)}
-      ${sec('Recommended Actions',    s.recommended_actions, 'warning')}
+      ${s.title ? `<div style="font-size:14px;font-weight:700;letter-spacing:0.04em;color:#f8fafc;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);font-family:var(--font-mono);">${s.title.toUpperCase()}</div>` : ''}
+      ${sec('Executive Overview',            s.overview,           'highlight')}
+      ${sec('Syndicate Hierarchy & Nodes',   s.network_breakdown)}
+      ${sec('Cross-Repository Linkages',     s.cross_network)}
+      ${sec('Key Persons of Interest',       s.key_suspects)}
+      ${sec('Investigative Directives',      s.recommended_actions, 'warning')}
     </div>`;
   } catch (err) {
-    el.aiBody.innerHTML = `<div style="color:#ef4444;padding:12px;">Error: ${err.message}</div>`;
+    el.aiBody.innerHTML = `<div style="color:#f87171;padding:12px;font-family:var(--font-mono);">Dossier compilation error: ${err.message}</div>`;
   }
 });
 
-// ── AI Modal ───────────────────────────────────────────────────────────────────
+// ── Dossier Modal Visibility ───────────────────────────────────────────────────
 function showAiModal(msg) {
-  if (el.aiTitle) el.aiTitle.textContent = 'Groq AI Analysis';
+  if (el.aiTitle) el.aiTitle.textContent = 'FORENSIC INTELLIGENCE ASSESSMENT';
   el.aiBody.innerHTML = `<div class="ai-thinking"><div class="spinner"></div><span>${msg}</span></div>`;
   el.aiModal.classList.remove('hidden');
 }
 $('ai-modal-close').addEventListener('click', () => el.aiModal.classList.add('hidden'));
 el.aiModal.addEventListener('click', e => { if (e.target === el.aiModal) el.aiModal.classList.add('hidden'); });
 
-// ── Tooltip ────────────────────────────────────────────────────────────────────
+// ── Precision Tooltip ──────────────────────────────────────────────────────────
 function nodeTip(n) {
   const srcList = (n.sources || []).join(', ');
   return `<strong>${n.label}</strong><br>
-    ${n.is_criminal ? '<span style="color:#ef4444;">⚠ Known Criminal</span><br>' : ''}
-    ${n.has_stolen_vehicle ? '<span style="color:#f97316;">🚗 Stolen Vehicle</span><br>' : ''}
-    ${n.multi_source ? '<span style="color:#facc15;">🔗 Appears in multiple files</span><br>' : ''}
-    Network: ${n.cluster} &nbsp;·&nbsp; Connections: ${n.degree}<br>
-    <span style="color:#4e637d;">Sources: ${srcList}</span>`;
+    ${n.is_criminal ? '<span style="color:#f87171;font-family:monospace;font-size:10.5px;">[!] PRIORITY POI</span><br>' : ''}
+    ${n.has_stolen_vehicle ? '<span style="color:#fb923c;font-family:monospace;font-size:10.5px;">[ASSET] Stolen Vehicle Linked</span><br>' : ''}
+    ${n.multi_source ? '<span style="color:#eab308;font-family:monospace;font-size:10.5px;">[CORRELATION] Multi-Repository Entity</span><br>' : ''}
+    Syndicate #${n.cluster} &nbsp;·&nbsp; Degree: ${n.degree}<br>
+    <span style="color:#64748b;font-family:monospace;font-size:10px;">Sources: ${srcList}</span>`;
 }
 
 function edgeTip(e) {
   const amtLine = e.total_amount
-    ? `<br><span style="color:#34d399;font-family:monospace;">₹${Math.round(e.total_amount).toLocaleString('en-IN')}</span> (${e.txn_count} txn)`
+    ? `<br><span style="color:#10b981;font-family:monospace;">₹${Math.round(e.total_amount).toLocaleString('en-IN')}</span> (${e.txn_count} record${e.txn_count > 1 ? 's' : ''})`
     : '';
   return `<strong>${e.source} ↔ ${e.target}</strong><br>
-    <span style="color:${edgeStroke(e.type, e.suspicious)};">${e.type}</span>
+    <span style="color:${edgeStroke(e.type, e.suspicious)};font-family:monospace;font-size:10.5px;">${e.type.toUpperCase()}</span>
     ${amtLine}
-    ${e.suspicious ? '<br><span style="color:#f87171;">⚠ Flagged suspicious</span>' : ''}`;
+    ${e.suspicious ? '<br><span style="color:#f87171;font-family:monospace;font-size:10.5px;">[!] FLAGGED SUSPICIOUS</span>' : ''}`;
 }
 
 function showTooltip(ev, html) {
@@ -724,14 +762,16 @@ function showTooltip(ev, html) {
 }
 function moveTooltip(ev) {
   let x = ev.clientX + 14, y = ev.clientY + 14;
-  if (x + 240 > window.innerWidth)  x = ev.clientX - 240;
-  if (y + 100 > window.innerHeight) y = ev.clientY - 100;
+  if (x + 250 > window.innerWidth)  x = ev.clientX - 250;
+  if (y + 110 > window.innerHeight) y = ev.clientY - 110;
   el.tooltip.style.left = x + 'px';
   el.tooltip.style.top  = y + 'px';
 }
-function hideTooltip() { el.tooltip.classList.add('hidden'); }
+function hideTooltip() {
+  el.tooltip.classList.add('hidden');
+}
 
-// ── Zoom controls ──────────────────────────────────────────────────────────────
+// ── Zoom Controls ──────────────────────────────────────────────────────────────
 $('zoom-in').addEventListener('click',  () => svgSel?.transition().duration(250).call(zoomBehavior.scaleBy, 1.4));
 $('zoom-out').addEventListener('click', () => svgSel?.transition().duration(250).call(zoomBehavior.scaleBy, 0.7));
 $('zoom-fit').addEventListener('click', () => {
@@ -741,11 +781,11 @@ $('zoom-fit').addEventListener('click', () => {
   const s = Math.min((W * 0.9) / 3000, (H * 0.9) / 3000);
   svgSel.transition().duration(350).call(
     zoomBehavior.transform,
-    d3.zoomIdentity.translate(W/2, H/2).scale(s).translate(-1500, -1500)
+    d3.zoomIdentity.translate(W / 2, H / 2).scale(s).translate(-1500, -1500)
   );
 });
 
-// ── Buttons ────────────────────────────────────────────────────────────────────
+// ── Workspace Reset & Multi-Source Triggers ────────────────────────────────────
 function initButtons() {
   $('btn-reset').addEventListener('click', () => {
     graphData = null;
@@ -767,7 +807,7 @@ function initButtons() {
   $('btn-load-all-quick').addEventListener('click', () => loadAllFiles(false));
 }
 
-// ── Filters ────────────────────────────────────────────────────────────────────
+// ── Correlation Display Filters ────────────────────────────────────────────────
 ['filter-criminals','filter-civilians','filter-suspicious'].forEach(id => {
   $(id)?.addEventListener('change', () => {
     if (!graphData) return;
@@ -786,12 +826,12 @@ function initButtons() {
   });
 });
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+// ── Utility Helpers ────────────────────────────────────────────────────────────
 function shortenName(name) {
   if (!name) return '';
-  if (name.length <= 12) return name;
+  if (name.length <= 13) return name;
   const p = name.trim().split(' ');
-  return p.length < 2 ? name.slice(0, 11) + '…' : p[0] + ' ' + p[p.length-1][0] + '.';
+  return p.length < 2 ? name.slice(0, 12) + '…' : p[0] + ' ' + p[p.length-1][0] + '.';
 }
 
 function badge(text, cls) {
@@ -812,28 +852,28 @@ function tagCls(type) {
 function calcRisk(node, edges) {
   let score = 0;
   const factors = [];
-  if (node.is_criminal)        { score += 40; factors.push('Listed as known criminal'); }
-  if (node.has_stolen_vehicle) { score += 25; factors.push('Linked to stolen vehicle'); }
-  if (node.multi_source)       { score += 10; factors.push('Appears in multiple data sources'); }
-  if (node.degree >= 10)       { score += 20; factors.push(`Highly connected (${node.degree} links)`); }
-  else if (node.degree >= 5)   { score += 10; factors.push(`Well connected (${node.degree} links)`); }
+  if (node.is_criminal)        { score += 40; factors.push('Documented Record as Priority POI'); }
+  if (node.has_stolen_vehicle) { score += 25; factors.push('Linked to active stolen motor asset'); }
+  if (node.multi_source)       { score += 10; factors.push('Cross-referenced across multiple evidence files'); }
+  if (node.degree >= 10)       { score += 20; factors.push(`High link density (${node.degree} relationships)`); }
+  else if (node.degree >= 5)   { score += 10; factors.push(`Moderate link density (${node.degree} relationships)`); }
   const susp = edges.filter(e => e.suspicious).length;
-  if (susp > 0) { score += Math.min(15, susp * 5); factors.push(`${susp} suspicious transaction(s)`); }
+  if (susp > 0) { score += Math.min(15, susp * 5); factors.push(`${susp} flagged transaction(s) or calls`); }
   score = Math.min(100, score);
   return {
     score, factors,
-    color: score >= 70 ? '#ef4444' : score >= 40 ? '#f59e0b' : '#60a5fa',
-    level: score >= 70 ? 'HIGH'    : score >= 40 ? 'MEDIUM'  : 'LOW',
+    color: score >= 70 ? '#ef4444' : score >= 40 ? '#f59e0b' : '#38bdf8',
+    level: score >= 70 ? 'CRITICAL' : score >= 40 ? 'ELEVATED' : 'ROUTINE',
   };
 }
 
 function hexAlpha(hex, a) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
+  const r = parseInt(hex.slice(1,3), 16);
+  const g = parseInt(hex.slice(3,5), 16);
+  const b = parseInt(hex.slice(5,7), 16);
   return `rgba(${r},${g},${b},${a})`;
 }
 
-// Expose for inline onclick
+// Expose for inline handlers
 window.analyzeCluster = analyzeCluster;
 window.explainEdge    = explainEdge;
