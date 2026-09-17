@@ -8,12 +8,14 @@ const API = window.location.hostname === 'localhost' || window.location.hostname
   : '/api';
 
 // ── State ──────────────────────────────────────────────────────────────────────
-let graphData    = null;
-let activeNodeId = null;
-let activeEdge   = null;
-let zoomBehavior = null;
-let svgSel       = null;
-let gRootSel     = null;
+let graphData     = null;
+let activeNodeId  = null;
+let activeEdge    = null;
+let zoomBehavior  = null;
+let svgSel        = null;
+let gRootSel      = null;
+let activeNodeMap = null;
+let activeEdges   = null;
 
 // ── DOM Elements ───────────────────────────────────────────────────────────────
 const $  = id => document.getElementById(id);
@@ -45,6 +47,7 @@ const el = {
 document.addEventListener('DOMContentLoaded', () => {
   initUpload();
   initButtons();
+  initNodeSearch();
   loadDatasetList();
 });
 
@@ -259,6 +262,7 @@ function renderGraph(data, filename) {
   const nodes = data.nodes.map(n => ({ ...n }));
   const nodeMap = {};
   nodes.forEach(n => { nodeMap[n.id] = n; });
+  activeNodeMap = nodeMap;
 
   // SVG Layers
   svgSel   = d3.select('#graph-svg');
@@ -310,6 +314,7 @@ function renderGraph(data, filename) {
 
   // Link Vectors
   const edges = data.edges.filter(e => nodeMap[e.source] && nodeMap[e.target]);
+  activeEdges = edges;
 
   gEdges.selectAll('.edge-line')
     .data(edges)
@@ -395,6 +400,13 @@ function renderGraph(data, filename) {
 
   // Update POI badge count
   if (typeof updatePOICount === 'function') updatePOICount();
+
+  // Reset spotlight search for newly loaded graph
+  $('canvas-search-wrap')?.classList.remove('hidden');
+  const searchInput = $('node-search-input');
+  if (searchInput) searchInput.value = '';
+  $('node-search-clear')?.classList.add('hidden');
+  $('search-dropdown')?.classList.add('hidden');
 }
 
 // ── Node Click Handler ─────────────────────────────────────────────────────────
@@ -834,6 +846,12 @@ function initButtons() {
     hideBanner();
     closeDetailPanel();
     document.querySelectorAll('.dataset-item').forEach(e => e.classList.remove('active'));
+    activeNodeMap = null;
+    activeEdges   = null;
+    $('canvas-search-wrap')?.classList.add('hidden');
+    $('search-dropdown')?.classList.add('hidden');
+    const searchInput = $('node-search-input');
+    if (searchInput) searchInput.value = '';
     // close criminals panel too
     closeCriminalsOutput();
   });
@@ -867,6 +885,194 @@ function initButtons() {
     });
   });
 });
+
+// ── Spotlight Entity Search & Focus ───────────────────────────────────────────
+function escapeHtml(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function initNodeSearch() {
+  const input = $('node-search-input');
+  const dropdown = $('search-dropdown');
+  const clearBtn = $('node-search-clear');
+  let selectedIdx = -1;
+
+  if (!input || !dropdown) return;
+
+  function closeDropdown() {
+    dropdown.classList.add('hidden');
+    dropdown.innerHTML = '';
+    selectedIdx = -1;
+  }
+
+  function renderResults(q) {
+    if (!graphData || !graphData.nodes) {
+      closeDropdown();
+      return;
+    }
+    const query = q.trim().toLowerCase();
+    if (!query) {
+      clearBtn?.classList.add('hidden');
+      closeDropdown();
+      return;
+    }
+    clearBtn?.classList.remove('hidden');
+
+    const matches = graphData.nodes.filter(n =>
+      (n.label && n.label.toLowerCase().includes(query)) ||
+      (n.id && n.id.toLowerCase().includes(query)) ||
+      (n.details?.account_no && String(n.details.account_no).toLowerCase().includes(query)) ||
+      (n.details?.Mobile_Number && String(n.details.Mobile_Number).toLowerCase().includes(query))
+    ).slice(0, 10);
+
+    if (!matches.length) {
+      dropdown.innerHTML = `<div class="search-empty-msg">No entities matching "${escapeHtml(q)}"</div>`;
+      dropdown.classList.remove('hidden');
+      selectedIdx = -1;
+      return;
+    }
+
+    dropdown.innerHTML = matches.map((n, i) => `
+      <div class="search-item" data-id="${escapeHtml(n.id)}" data-idx="${i}">
+        <div class="search-item-info">
+          <div class="search-item-name">${escapeHtml(n.label || n.id)}</div>
+          <div class="search-item-meta">
+            <span>Net #${n.cluster}</span>
+            <span>·</span>
+            <span>Links: ${n.degree || 0}</span>
+            ${n.details?.account_no ? `<span>· Acct: …${escapeHtml(String(n.details.account_no).slice(-4))}</span>` : ''}
+          </div>
+        </div>
+        <span class="search-badge ${n.is_criminal ? 'poi' : 'civ'}">${n.is_criminal ? 'POI' : 'CIV'}</span>
+      </div>
+    `).join('');
+
+    dropdown.querySelectorAll('.search-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const id = el.getAttribute('data-id');
+        focusNodeOnCanvas(id);
+        input.value = activeNodeMap?.[id]?.label || id;
+        closeDropdown();
+      });
+    });
+
+    dropdown.classList.remove('hidden');
+    selectedIdx = -1;
+  }
+
+  input.addEventListener('input', e => renderResults(e.target.value));
+
+  input.addEventListener('keydown', e => {
+    const items = dropdown.querySelectorAll('.search-item');
+    if (!items.length) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectedIdx = (selectedIdx + 1) % items.length;
+      updateSelection(items);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectedIdx = (selectedIdx - 1 + items.length) % items.length;
+      updateSelection(items);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (selectedIdx >= 0 && items[selectedIdx]) {
+        items[selectedIdx].click();
+      } else if (items[0]) {
+        items[0].click();
+      }
+    } else if (e.key === 'Escape') {
+      closeDropdown();
+      input.blur();
+    }
+  });
+
+  function updateSelection(items) {
+    items.forEach((it, idx) => {
+      it.classList.toggle('selected', idx === selectedIdx);
+      if (idx === selectedIdx) it.scrollIntoView({ block: 'nearest' });
+    });
+  }
+
+  clearBtn?.addEventListener('click', () => {
+    input.value = '';
+    clearBtn.classList.add('hidden');
+    closeDropdown();
+    input.focus();
+  });
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.canvas-search-wrap')) {
+      closeDropdown();
+    }
+  });
+
+  // Global hotkey "/" to focus search
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+      if (graphData) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+    }
+  });
+}
+
+function focusNodeOnCanvas(nodeId) {
+  if (!graphData || !activeNodeMap || !activeNodeMap[nodeId]) return;
+  const node = activeNodeMap[nodeId];
+
+  // Smooth pan & zoom to center entity
+  const wrapper = $('canvas-wrapper');
+  const W = wrapper.clientWidth  || 900;
+  const H = wrapper.clientHeight || 700;
+  const targetScale = 1.35;
+
+  const transform = d3.zoomIdentity
+    .translate(W / 2, H / 2)
+    .scale(targetScale)
+    .translate(-node.x, -node.y);
+
+  svgSel?.transition()
+    .duration(650)
+    .ease(d3.easeCubicOut)
+    .call(zoomBehavior.transform, transform);
+
+  // Trigger selection & inspector
+  if (activeEdges) {
+    onNodeClick(node, activeEdges, activeNodeMap);
+  }
+
+  // Radar ping pulse animation on node
+  if (gRootSel) {
+    gRootSel.selectAll('.spotlight-pulse').remove();
+    const pingColor = node.is_criminal ? '#ef4444' : '#38bdf8';
+    const pulse = gRootSel.append('circle')
+      .attr('class', 'spotlight-pulse')
+      .attr('cx', node.x)
+      .attr('cy', node.y)
+      .attr('r', nodeR(node) + 4)
+      .attr('fill', 'none')
+      .attr('stroke', pingColor)
+      .attr('stroke-width', 3)
+      .attr('pointer-events', 'none');
+
+    pulse.transition()
+      .duration(1200)
+      .ease(d3.easeQuadOut)
+      .attr('r', nodeR(node) + 48)
+      .attr('stroke-width', 1)
+      .attr('opacity', 0)
+      .remove();
+  }
+}
 
 // ── Utility Helpers ────────────────────────────────────────────────────────────
 function shortenName(name) {

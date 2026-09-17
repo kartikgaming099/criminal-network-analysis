@@ -240,6 +240,19 @@
         <p class="empty-desc" style="font-size:12px;color:#475569;margin-top:4px;">Use <strong>Show Prototype Data</strong> in the sidebar to load sample datasets.</p>
       </div>
 
+      <!-- Spotlight Search Overlay -->
+      <div class="canvas-search-wrap hidden" id="canvas-search-wrap">
+        <div class="canvas-search-box">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="node-search-input" placeholder="Spotlight entity (Name / ID)… [/]" autocomplete="off" spellcheck="false" />
+          <button id="node-search-clear" class="search-clear-btn hidden" title="Clear search">✕</button>
+        </div>
+        <div class="search-dropdown hidden" id="search-dropdown"></div>
+      </div>
+
       <!-- D3 Interactive Graph Container -->
       <svg id="graph-svg" class="graph-svg hidden">
         <g id="graph-root"></g>

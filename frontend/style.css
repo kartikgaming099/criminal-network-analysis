@@ -1471,3 +1471,147 @@ html, body {
 .criminals-card-stats {
   display: flex; gap: 14px; margin-bottom: 9px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Spotlight Entity Search Overlay
+   ═══════════════════════════════════════════════════════════════════ */
+.canvas-search-wrap {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 30;
+  width: 290px;
+  max-width: calc(100% - 28px);
+}
+.canvas-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 15, 26, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.canvas-search-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.25);
+}
+.canvas-search-box .search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.canvas-search-box input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-primary);
+}
+.canvas-search-box input::placeholder {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.search-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 3px;
+  transition: color 0.15s;
+}
+.search-clear-btn:hover {
+  color: var(--text-primary);
+}
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  max-height: 270px;
+  overflow-y: auto;
+  background: rgba(10, 15, 26, 0.97);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+  padding: 4px;
+}
+.search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.search-item:last-child {
+  border-bottom: none;
+}
+.search-item:hover,
+.search-item.selected {
+  background: rgba(56, 189, 248, 0.12);
+}
+.search-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.search-item-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-item-meta {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.search-badge {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.search-badge.poi {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+.search-badge.civ {
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+}
+.search-empty-msg {
+  padding: 10px;
+  text-align: center;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
