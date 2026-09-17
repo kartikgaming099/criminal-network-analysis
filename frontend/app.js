@@ -246,11 +246,12 @@ function renderGraph(data, filename) {
   $('stat-num-links').textContent    = data.stats.total_edges;
   $('stat-num-clusters').textContent = data.stats.total_clusters;
   el.graphStats.style.display = 'flex';
-  ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-timeline-toggle','btn-criminals-output','btn-reset'].forEach(id => {
+  ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-timeline-toggle','btn-vulnerability','btn-criminals-output','btn-reset'].forEach(id => {
     if ($(id)) $(id).style.display = '';
   });
   populatePathDatalist();
   initTimeline();
+  fetchVulnerabilityData();
   el.filterSec.style.display = '';
   el.legendSec.style.display = '';
 
@@ -469,12 +470,14 @@ function clearHighlights() {
   activeNodeId      = null;
   activeEdge        = null;
   isolatedClusterId = null;
-  d3.selectAll('.edge-line').attr('opacity', null).classed('highlighted', false).classed('path-conduit', false);
+  d3.selectAll('.edge-line').attr('opacity', null).classed('highlighted', false).classed('path-conduit', false).classed('disrupted-severed', false);
   d3.selectAll('.node-circle').attr('opacity', null).attr('r', d => nodeR(d)).attr('stroke-width', 2.2).classed('path-conduit-node', false);
   d3.selectAll('.node-g').attr('opacity', null);
   d3.selectAll('.node-label').classed('selected', false);
   d3.selectAll('.cluster-group').attr('opacity', null);
   document.querySelectorAll('.legend-item').forEach(el => el.classList.remove('active'));
+  const notice = $('vuln-disruption-notice');
+  if (notice) notice.style.display = 'none';
   hideBanner();
 }
 
@@ -1050,7 +1053,7 @@ function initButtons() {
     el.graphSvg.classList.add('hidden');
     el.zoomCtrls.classList.add('hidden');
     el.graphStats.style.display = 'none';
-    ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-timeline-toggle','btn-criminals-output','btn-reset'].forEach(id => {
+    ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-timeline-toggle','btn-vulnerability','btn-criminals-output','btn-reset'].forEach(id => {
       if ($(id)) $(id).style.display = 'none';
     });
     el.filterSec.style.display = 'none';
@@ -1065,10 +1068,11 @@ function initButtons() {
     $('search-dropdown')?.classList.add('hidden');
     const searchInput = $('node-search-input');
     if (searchInput) searchInput.value = '';
-    // close criminals, path, and timeline panel
+    // close all overlays
     closeCriminalsOutput();
     closePathTracer();
     closeTimelineDock();
+    closeVulnerabilityModal();
   });
 
   $('btn-load-all').addEventListener('click', () => loadAllFiles(false));
@@ -1117,6 +1121,28 @@ function initButtons() {
         playTimeline();
       }
     });
+  });
+
+  // Key Players & Vulnerability Matrix
+  $('btn-vulnerability')?.addEventListener('click', () => openVulnerabilityModal());
+  $('vulnerability-modal-close')?.addEventListener('click', () => closeVulnerabilityModal());
+  $('vulnerability-modal-overlay')?.addEventListener('click', e => {
+    if (e.target === $('vulnerability-modal-overlay')) closeVulnerabilityModal();
+  });
+
+  document.querySelectorAll('.vuln-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.vuln-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const filter = tab.getAttribute('data-vuln-filter') || 'all';
+      renderVulnerabilityMatrix(filter, $('vuln-search-input')?.value || '');
+    });
+  });
+
+  $('vuln-search-input')?.addEventListener('input', e => {
+    const activeTab = document.querySelector('.vuln-tab.active');
+    const filter = activeTab ? activeTab.getAttribute('data-vuln-filter') : 'all';
+    renderVulnerabilityMatrix(filter, e.target.value);
   });
 
   initLegendFilters();
@@ -1444,6 +1470,7 @@ function initKeyboardNav() {
       el.aiModal?.classList.add('hidden');
       el.poiOverlay?.classList.add('hidden');
       $('path-modal-overlay')?.classList.add('hidden');
+      $('vulnerability-modal-overlay')?.classList.add('hidden');
       closeCriminalsOutput();
       closeDetailPanel();
       clearHighlights();
@@ -1498,6 +1525,11 @@ function initKeyboardNav() {
     } else if (e.key.toLowerCase() === 'l') {
       e.preventDefault();
       toggleTimelineDock();
+    } else if (e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const ov = $('vulnerability-modal-overlay');
+      if (ov && !ov.classList.contains('hidden')) closeVulnerabilityModal();
+      else openVulnerabilityModal();
     } else if (e.key === ' ' && $('timeline-dock') && !$('timeline-dock').classList.contains('hidden')) {
       e.preventDefault();
       togglePlayTimeline();
@@ -2456,5 +2488,245 @@ window.onTimelineScrub     = onTimelineScrub;
 window.togglePlayTimeline  = togglePlayTimeline;
 window.stepTimeline        = stepTimeline;
 window.resetTimeline       = resetTimeline;
+
+// ── FEATURE 3: Key Players & Syndicate Vulnerability Matrix ────────────────────
+let vulnerabilityData       = null;
+let activeDisruptedNodeId   = null;
+
+async function fetchVulnerabilityData() {
+  if (!graphData || !graphData.nodes) return;
+  try {
+    const res = await fetch(`${API}/analyze/vulnerability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nodes: graphData.nodes,
+        edges: graphData.edges,
+      }),
+    });
+    const json = await res.json();
+    if (json.vulnerability) {
+      vulnerabilityData = json.vulnerability;
+      updateVulnerabilityKPIs(vulnerabilityData.kpis);
+      markArticulationPointsOnCanvas(vulnerabilityData.articulation_points || []);
+    }
+  } catch (err) {
+    console.warn('Vulnerability analysis fetch failed:', err);
+  }
+}
+
+function updateVulnerabilityKPIs(kpis) {
+  if (!kpis) return;
+  if ($('vuln-kpi-bridges')) $('vuln-kpi-bridges').textContent = kpis.articulation_points_count || 0;
+  if ($('vuln-kpi-broker'))  $('vuln-kpi-broker').textContent  = shortenName(kpis.top_broker_name || '--');
+  if ($('vuln-kpi-broker-sub')) $('vuln-kpi-broker-sub').textContent = `Betweenness: ${kpis.top_broker_score || 0}/100`;
+  if ($('vuln-kpi-hub'))     $('vuln-kpi-hub').textContent     = shortenName(kpis.top_hub_name || '--');
+  if ($('vuln-kpi-hub-sub')) $('vuln-kpi-hub-sub').textContent = `PageRank Hub: ${kpis.top_hub_score || 0}/100`;
+  if ($('vuln-kpi-score'))   $('vuln-kpi-score').textContent   = `${kpis.network_vulnerability_pct || 0}%`;
+}
+
+function markArticulationPointsOnCanvas(apList) {
+  if (!apList || !apList.length) return;
+  const apSet = new Set(apList);
+  d3.selectAll('.node-circle')
+    .classed('cut-vertex-node', d => apSet.has(d.id));
+}
+
+function toggleVulnerabilityModal() {
+  const modal = $('vulnerability-modal-overlay');
+  if (!modal) return;
+  if (modal.classList.contains('hidden')) {
+    openVulnerabilityModal();
+  } else {
+    closeVulnerabilityModal();
+  }
+}
+
+async function openVulnerabilityModal() {
+  if (!graphData) return;
+  const modal = $('vulnerability-modal-overlay');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  if (!vulnerabilityData) {
+    await fetchVulnerabilityData();
+  }
+  renderVulnerabilityMatrix('all', $('vuln-search-input')?.value || '');
+}
+
+function closeVulnerabilityModal() {
+  const modal = $('vulnerability-modal-overlay');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderVulnerabilityMatrix(filter = 'all', searchQuery = '') {
+  const tbody = $('vuln-table-body');
+  if (!tbody || !vulnerabilityData || !vulnerabilityData.rankings) return;
+
+  let list = vulnerabilityData.rankings.slice();
+
+  // Apply tab filter
+  if (filter === 'bridge') {
+    list = list.filter(r => r.is_articulation_point);
+  } else if (filter === 'broker') {
+    list = list.filter(r => r.betweenness_score >= 40);
+  } else if (filter === 'hub') {
+    list = list.filter(r => r.pagerank_score >= 40);
+  } else if (filter === 'poi') {
+    list = list.filter(r => r.is_criminal);
+  }
+
+  // Apply text search
+  const q = searchQuery.trim().toLowerCase();
+  if (q) {
+    list = list.filter(r =>
+      r.id.toLowerCase().includes(q) ||
+      (r.role_label && r.role_label.toLowerCase().includes(q))
+    );
+  }
+
+  if (!list.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align:center;padding:24px;color:#64748b;font-family:var(--font-mono);font-size:12px;">
+          NO TARGETS MATCHING THE SELECTED VULNERABILITY FILTER
+        </td>
+      </tr>`;
+    return;
+  }
+
+  let h = '';
+  list.forEach((r, idx) => {
+    let roleClass = 'associate';
+    if (r.role === 'CRITICAL_BRIDGE') roleClass = 'bridge';
+    else if (r.role === 'KEY_BROKER') roleClass = 'broker';
+    else if (r.role === 'INFLUENCE_HUB') roleClass = 'hub';
+    else if (r.role === 'OPERATIVE') roleClass = 'operative';
+
+    let threatColor = '#10b981';
+    if (r.composite_threat >= 75) threatColor = '#ef4444';
+    else if (r.composite_threat >= 45) threatColor = '#f59e0b';
+
+    const safeId = escapeHtml(r.id);
+    const clusterStr = r.cluster != null ? ` · Syndicate #${r.cluster}` : '';
+    const crimTag = r.is_criminal ? ' <span class="badge suspicious" style="font-size:9px;">POI</span>' : '';
+    const stolenTag = r.has_stolen_vehicle ? ' <span class="badge vehicle" style="font-size:9px;">STOLEN VEH</span>' : '';
+
+    h += `<tr>
+      <td class="vuln-rank">${idx + 1}</td>
+      <td>
+        <div class="vuln-entity-cell">
+          <span class="vuln-entity-name">${safeId}${crimTag}${stolenTag}</span>
+          <span class="vuln-entity-meta">${r.degree} links${clusterStr}</span>
+        </div>
+      </td>
+      <td>
+        <span class="role-tag ${roleClass}">${escapeHtml(r.role_label)}</span>
+      </td>
+      <td>
+        <div class="threat-bar-container">
+          <div class="threat-bar-track">
+            <div class="threat-bar-fill" style="width:${r.composite_threat}%;background:${threatColor};"></div>
+          </div>
+          <span class="threat-bar-val" style="color:${threatColor};">${r.composite_threat}</span>
+        </div>
+      </td>
+      <td>
+        <div style="font-family:var(--font-mono);font-size:11px;font-weight:600;color:#fbbf24;">${r.betweenness_score} / 100</div>
+      </td>
+      <td>
+        <div style="font-family:var(--font-mono);font-size:11px;font-weight:600;color:#38bdf8;">${r.pagerank_score} / 100</div>
+      </td>
+      <td>
+        <span style="font-family:var(--font-mono);font-size:11.5px;color:var(--text-primary);font-weight:600;">${r.degree}</span>
+      </td>
+      <td style="text-align:right;">
+        <div style="display:inline-flex;gap:4px;">
+          <button class="btn btn-sm btn-ghost" onclick="focusVulnTarget('${safeId}')" title="Focus entity on canvas">
+            Focus
+          </button>
+          <button class="btn btn-sm btn-ghost" onclick="traceVulnTarget('${safeId}')" title="Trace conduit from this target">
+            Trace
+          </button>
+          <button class="btn-disrupt" onclick="simulateNodeDisruption('${safeId}')" title="Simulate arrest and network fracturing">
+            ⚡ Simulate Arrest
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = h;
+}
+
+function focusVulnTarget(nodeId) {
+  closeVulnerabilityModal();
+  focusNodeOnCanvas(nodeId);
+}
+
+function traceVulnTarget(nodeId) {
+  closeVulnerabilityModal();
+  openPathTracerWithSource(nodeId);
+}
+
+function simulateNodeDisruption(nodeId) {
+  if (!graphData || !activeNodeMap) return;
+  activeDisruptedNodeId = nodeId;
+  closeVulnerabilityModal();
+
+  const connectedEdgeIndices = new Set();
+  let severedCount = 0;
+
+  graphData.edges.forEach((e, idx) => {
+    if (e.source === nodeId || e.target === nodeId) {
+      connectedEdgeIndices.add(idx);
+      severedCount++;
+    }
+  });
+
+  // Calculate remaining connected components
+  let remainingComps = 1;
+  if (vulnerabilityData && vulnerabilityData.rankings) {
+    const r = vulnerabilityData.rankings.find(x => x.id === nodeId);
+    if (r) remainingComps = r.disruption_components;
+  }
+
+  // Visual Disruption styling on D3 canvas
+  d3.selectAll('.node-circle')
+    .attr('opacity', d => d.id === nodeId ? 0.15 : 1)
+    .attr('stroke', d => d.id === nodeId ? '#ef4444' : nodeStroke(d));
+
+  d3.selectAll('.edge-line')
+    .classed('disrupted-severed', (d, i) => connectedEdgeIndices.has(i))
+    .attr('opacity', (d, i) => connectedEdgeIndices.has(i) ? 0.9 : 0.4);
+
+  // Show notice banner
+  const notice = $('vuln-disruption-notice');
+  const text = $('vuln-disruption-text');
+  if (notice && text) {
+    text.innerHTML = `DISRUPTION SIMULATION: Target <strong>${escapeHtml(nodeId)}</strong> neutralized · <strong>${severedCount} links severed</strong> · Network fractured into <strong>${remainingComps} subnets</strong>`;
+    notice.style.display = 'flex';
+  }
+
+  showBanner(`DISRUPTION SIMULATION ACTIVE: '${nodeId}' removed · ${severedCount} links severed · Fractured into ${remainingComps} subnets`, 'danger');
+}
+
+function restoreDisruptionSimulation() {
+  activeDisruptedNodeId = null;
+  const notice = $('vuln-disruption-notice');
+  if (notice) notice.style.display = 'none';
+  clearHighlights();
+  showBanner('NETWORK CANVAS RESTORED TO ACTIVE BASELINE STATE', 'info');
+}
+
+window.toggleVulnerabilityModal   = toggleVulnerabilityModal;
+window.openVulnerabilityModal     = openVulnerabilityModal;
+window.closeVulnerabilityModal    = closeVulnerabilityModal;
+window.renderVulnerabilityMatrix  = renderVulnerabilityMatrix;
+window.focusVulnTarget            = focusVulnTarget;
+window.traceVulnTarget            = traceVulnTarget;
+window.simulateNodeDisruption     = simulateNodeDisruption;
+window.restoreDisruptionSimulation= restoreDisruptionSimulation;
+
 
 

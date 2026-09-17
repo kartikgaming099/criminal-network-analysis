@@ -771,3 +771,161 @@ def find_path_conduit(nodes: list, edges: list, source: str, target: str) -> dic
         'has_suspicious': has_suspicious,
     }
 
+
+# ── FEATURE 3: Key Player & Network Vulnerability Analytics ────────────────────
+
+def analyze_network_vulnerability(nodes: list, edges: list) -> dict:
+    """
+    Perform graph-theoretic centrality and structural vulnerability analysis.
+    Identifies articulation points (cut-vertices), key brokers (betweenness),
+    influence hubs (PageRank), and network disruption impact.
+    """
+    if not nodes:
+        return {'kpis': {}, 'rankings': [], 'articulation_points': []}
+
+    G = nx.Graph()
+    node_map = {n['id']: n for n in nodes}
+    for n in nodes:
+        G.add_node(n['id'], **n)
+
+    for e in edges:
+        G.add_edge(e['source'], e['target'], **e)
+
+    # 1. Centrality Computations
+    try:
+        betweenness = nx.betweenness_centrality(G)
+    except Exception:
+        betweenness = {n: 0.0 for n in G.nodes()}
+
+    try:
+        degree_cent = nx.degree_centrality(G)
+    except Exception:
+        degree_cent = {n: G.degree(n) / max(1, G.number_of_nodes() - 1) for n in G.nodes()}
+
+    try:
+        closeness = nx.closeness_centrality(G)
+    except Exception:
+        closeness = {n: 0.0 for n in G.nodes()}
+
+    try:
+        pagerank = nx.pagerank(G, max_iter=200)
+    except Exception:
+        pagerank = {n: 1.0 / max(1, G.number_of_nodes()) for n in G.nodes()}
+
+    # 2. Articulation Points (Cut-Vertices) & Bridges
+    articulation_pts = set()
+    bridges = []
+    # For disconnected graphs, iterate over connected components
+    for comp in nx.connected_components(G):
+        subG = G.subgraph(comp)
+        if len(comp) > 2:
+            try:
+                for ap in nx.articulation_points(subG):
+                    articulation_pts.add(ap)
+            except Exception:
+                pass
+            try:
+                for b in nx.bridges(subG):
+                    bridges.append(list(b))
+            except Exception:
+                pass
+
+    # 3. Scale and normalize scores (0-100)
+    max_bet = max(betweenness.values()) if betweenness and max(betweenness.values()) > 0 else 1.0
+    max_deg = max(degree_cent.values()) if degree_cent and max(degree_cent.values()) > 0 else 1.0
+    max_pr  = max(pagerank.values()) if pagerank and max(pagerank.values()) > 0 else 1.0
+
+    rankings = []
+    for nid, node_data in node_map.items():
+        raw_bet = betweenness.get(nid, 0.0)
+        raw_deg = degree_cent.get(nid, 0.0)
+        raw_clo = closeness.get(nid, 0.0)
+        raw_pr  = pagerank.get(nid, 0.0)
+
+        score_bet = round((raw_bet / max_bet) * 100, 1)
+        score_deg = round((raw_deg / max_deg) * 100, 1)
+        score_pr  = round((raw_pr  / max_pr)  * 100, 1)
+
+        is_ap = nid in articulation_pts
+        is_crim = bool(node_data.get('is_criminal', False))
+        stolen = bool(node_data.get('has_stolen_vehicle', False))
+
+        # Composite Strategic Impact Score
+        composite = (score_bet * 0.45) + (score_pr * 0.35) + (score_deg * 0.20)
+        if is_ap:
+            composite += 25  # High bonus for bridge cut-vertices
+        if is_crim:
+            composite += 15
+        if stolen:
+            composite += 10
+        composite = min(100.0, round(composite, 1))
+
+        # Role Classification
+        if is_ap:
+            role = 'CRITICAL_BRIDGE'
+            role_label = 'Critical Bridge (Cut-Vertex)'
+        elif score_bet >= 60:
+            role = 'KEY_BROKER'
+            role_label = 'Key Broker / Cutout'
+        elif score_pr >= 60:
+            role = 'INFLUENCE_HUB'
+            role_label = 'Syndicate Hub'
+        elif is_crim:
+            role = 'OPERATIVE'
+            role_label = 'Criminal Operative'
+        else:
+            role = 'ASSOCIATE'
+            role_label = 'Network Associate'
+
+        # Disruption simulation: if node is removed, how many components are created?
+        G_temp = G.copy()
+        G_temp.remove_node(nid)
+        frag_components = nx.number_connected_components(G_temp) if G_temp.number_of_nodes() > 0 else 0
+        severed_links = G.degree(nid)
+
+        rankings.append({
+            'id': nid,
+            'label': node_data.get('label', nid),
+            'is_criminal': is_crim,
+            'has_stolen_vehicle': stolen,
+            'cluster': node_data.get('cluster', None),
+            'degree': G.degree(nid),
+            'betweenness_score': score_bet,
+            'pagerank_score': score_pr,
+            'degree_centrality_score': score_deg,
+            'closeness_score': round(raw_clo * 100, 1),
+            'composite_threat': composite,
+            'is_articulation_point': is_ap,
+            'role': role,
+            'role_label': role_label,
+            'disruption_components': frag_components,
+            'severed_links': severed_links,
+            'sources': node_data.get('sources', []),
+        })
+
+    rankings.sort(key=lambda x: x['composite_threat'], reverse=True)
+
+    top_broker = next((r for r in sorted(rankings, key=lambda x: x['betweenness_score'], reverse=True)), None)
+    top_hub = next((r for r in sorted(rankings, key=lambda x: x['pagerank_score'], reverse=True)), None)
+
+    # Vulnerability Rating: proportion of nodes that act as cut-vertices or major brokers
+    vuln_score = min(100, round((len(articulation_pts) / max(1, len(nodes))) * 250 + (len(bridges) * 3), 1))
+
+    return {
+        'kpis': {
+            'total_entities': len(nodes),
+            'total_connections': len(edges),
+            'articulation_points_count': len(articulation_pts),
+            'bridges_count': len(bridges),
+            'network_vulnerability_pct': vuln_score,
+            'top_broker_name': top_broker['id'] if top_broker else 'N/A',
+            'top_broker_score': top_broker['betweenness_score'] if top_broker else 0,
+            'top_hub_name': top_hub['id'] if top_hub else 'N/A',
+            'top_hub_score': top_hub['pagerank_score'] if top_hub else 0,
+        },
+        'articulation_points': list(articulation_pts),
+        'bridges': bridges,
+        'rankings': rankings,
+    }
+
+

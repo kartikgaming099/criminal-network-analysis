@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-from graph_engine import build_graph_from_csv, build_combined_graph, find_path_conduit
+from graph_engine import build_graph_from_csv, build_combined_graph, find_path_conduit, analyze_network_vulnerability
 from ai_engine import (
     guess_crime_pattern,
     explain_edge,
@@ -370,6 +370,28 @@ def analyze_path():
     except Exception as e:
         traceback.print_exc()
         return _error(str(e), 500)
+
+
+@app.route('/api/analyze/vulnerability', methods=['POST'])
+def analyze_vulnerability():
+    """
+    Perform structural vulnerability and key player centrality analysis.
+    Body: { "nodes": [...], "edges": [...] }
+    """
+    body  = request.get_json(force=True, silent=True) or {}
+    nodes = body.get('nodes', [])
+    edges = body.get('edges', [])
+
+    if not nodes:
+        return _error("nodes is required")
+
+    try:
+        res = analyze_network_vulnerability(nodes, edges)
+        return _ok({'vulnerability': res})
+    except Exception as e:
+        traceback.print_exc()
+        return _error(str(e), 500)
+
 
 
 

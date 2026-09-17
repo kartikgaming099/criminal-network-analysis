@@ -114,6 +114,15 @@
         <span>Timeline Flow</span>
       </button>
 
+      <button class="btn btn-ghost" id="btn-vulnerability" style="display:none;color:#f59e0b;border-color:rgba(245,158,11,0.35);background:rgba(245,158,11,0.1);" title="Key Players &amp; Syndicate Vulnerability Matrix (K)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+          <path d="M2 12h20"/>
+        </svg>
+        <span>Key Players &amp; Matrix</span>
+      </button>
+
       <button class="btn btn-criminals" id="btn-criminals-output" style="display:none;" title="View Criminals-Only Network Output">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -491,6 +500,10 @@
             <div class="shortcut-keys"><kbd class="kbd-key">L</kbd></div>
           </div>
           <div class="shortcut-item">
+            <div class="shortcut-desc">Toggle Key Players &amp; Vulnerability Matrix</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">K</kbd></div>
+          </div>
+          <div class="shortcut-item">
             <div class="shortcut-desc">Synthesize Case Briefing Dossier</div>
             <div class="shortcut-keys"><kbd class="kbd-key">S</kbd></div>
           </div>
@@ -629,6 +642,95 @@
             <div class="path-placeholder-title">Select Origin &amp; Destination Entities</div>
             <p class="path-placeholder-desc">Choose two individuals above or click &ldquo;Trace Path&rdquo; from any subject dossier in the inspector to discover intermediary relays, conduit transaction volumes, and AI forensic analysis.</p>
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key Players & Syndicate Vulnerability Matrix Modal -->
+  <div class="modal-overlay hidden" id="vulnerability-modal-overlay">
+    <div class="ai-modal vulnerability-modal">
+      <div class="ai-modal-header">
+        <div class="ai-badge">
+          <span class="status-indicator" style="background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,0.25);"></span>
+          <div>
+            <div class="dossier-heading-text">KEY PLAYERS &amp; SYNDICATE VULNERABILITY MATRIX</div>
+            <span class="dossier-sub-text">CLASSIFIED // GRAPH CENTRALITY &amp; STRUCTURAL DISRUPTION SIMULATION</span>
+          </div>
+        </div>
+        <button class="detail-close" id="vulnerability-modal-close" title="Close Matrix">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="vuln-modal-body">
+        <!-- Top Tactical KPI Cards -->
+        <div class="vuln-kpi-grid">
+          <div class="vuln-kpi-card danger">
+            <span class="vuln-kpi-num" id="vuln-kpi-bridges">0</span>
+            <span class="vuln-kpi-title">CRITICAL BRIDGES (CUT-VERTICES)</span>
+            <span class="vuln-kpi-sub">Removal fractures the network</span>
+          </div>
+          <div class="vuln-kpi-card warning">
+            <span class="vuln-kpi-num" id="vuln-kpi-broker">--</span>
+            <span class="vuln-kpi-title">TOP BROKER / CUTOUT</span>
+            <span class="vuln-kpi-sub" id="vuln-kpi-broker-sub">Max betweenness centrality</span>
+          </div>
+          <div class="vuln-kpi-card cyan">
+            <span class="vuln-kpi-num" id="vuln-kpi-hub">--</span>
+            <span class="vuln-kpi-title">PRIMARY INFLUENCE HUB</span>
+            <span class="vuln-kpi-sub" id="vuln-kpi-hub-sub">Max PageRank authority</span>
+          </div>
+          <div class="vuln-kpi-card accent">
+            <span class="vuln-kpi-num" id="vuln-kpi-score">0%</span>
+            <span class="vuln-kpi-title">STRUCTURAL FRAGILITY</span>
+            <span class="vuln-kpi-sub">Overall syndicate vulnerability</span>
+          </div>
+        </div>
+
+        <!-- Filter Tabs & Search Row -->
+        <div class="vuln-toolbar">
+          <div class="vuln-tabs">
+            <button class="vuln-tab active" data-vuln-filter="all">ALL TARGETS</button>
+            <button class="vuln-tab" data-vuln-filter="bridge">CRITICAL BRIDGES</button>
+            <button class="vuln-tab" data-vuln-filter="broker">TOP BROKERS</button>
+            <button class="vuln-tab" data-vuln-filter="hub">INFLUENCE HUBS</button>
+            <button class="vuln-tab" data-vuln-filter="poi">KNOWN POIS</button>
+          </div>
+          <div class="vuln-search-wrap">
+            <input type="text" id="vuln-search-input" class="vuln-search" placeholder="Filter targets in matrix…" />
+          </div>
+        </div>
+
+        <!-- Disruption Notice / Restore Banner -->
+        <div class="vuln-disruption-notice" id="vuln-disruption-notice" style="display:none;">
+          <span id="vuln-disruption-text">Disruption simulation active on target: <strong></strong></span>
+          <button class="btn btn-sm btn-ghost" onclick="restoreDisruptionSimulation()">Restore Network Canvas</button>
+        </div>
+
+        <!-- Matrix Table Container -->
+        <div class="vuln-table-wrap">
+          <table class="vuln-table" id="vuln-table">
+            <thead>
+              <tr>
+                <th style="width:40px;">#</th>
+                <th>TARGET ENTITY</th>
+                <th>CLASSIFICATION &amp; ROLE</th>
+                <th>COMPOSITE THREAT</th>
+                <th>BROKER RATING</th>
+                <th>AUTHORITY HUB</th>
+                <th>DIRECT LINKS</th>
+                <th style="text-align:right;">DISRUPTION ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="vuln-table-body">
+              <tr>
+                <td colspan="8" style="text-align:center;padding:24px;color:#64748b;">Loading vulnerability analysis matrix…</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
