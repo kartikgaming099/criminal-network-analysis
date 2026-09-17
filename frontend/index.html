@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIH26189 — Criminal Network Analysis</title>
+  <meta name="description" content="AI-powered criminal network analysis. Upload investigation data to uncover hidden connections, crime clusters and suspicious patterns." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <p id="loading-msg">Processing data…</p>
+    </div>
+  </div>
+
+  <!-- Navbar -->
+  <header class="navbar">
+    <div class="navbar-brand">
+      <div class="brand-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+        </svg>
+      </div>
+      <div>
+        <span class="brand-name">CrimeNet AI</span>
+        <span class="brand-sub">SIH26189 — Criminal Network Analysis</span>
+      </div>
+    </div>
+
+    <div class="navbar-center" id="graph-stats" style="display:none;">
+      <div class="stat-pill"><span class="stat-num" id="stat-num-persons">0</span><span class="stat-label">Persons</span></div>
+      <div class="stat-pill"><span class="stat-num" id="stat-num-links">0</span><span class="stat-label">Links</span></div>
+      <div class="stat-pill"><span class="stat-num" id="stat-num-clusters">0</span><span class="stat-label">Networks</span></div>
+    </div>
+
+    <div class="navbar-actions">
+      <button class="btn btn-summary" id="btn-summary" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Case Summary
+      </button>
+      <button class="btn btn-ghost" id="btn-anomalies" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Anomaly Scan
+      </button>
+      <button class="btn btn-ghost" id="btn-reset" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.54"/></svg>
+        Reset
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <main class="app-layout">
+
+    <!-- LEFT SIDEBAR -->
+    <aside class="sidebar">
+
+      <!-- Upload -->
+      <section class="sidebar-section">
+        <h3 class="section-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload CSV
+        </h3>
+        <div class="upload-zone" id="upload-zone">
+          <div class="upload-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </div>
+          <p class="upload-text">Drop CSV or <label class="upload-link" for="file-input">browse</label></p>
+          <p class="upload-hint">Call records, bank data, vehicle data</p>
+          <input type="file" id="file-input" accept=".csv" style="display:none;" />
+        </div>
+      </section>
+
+      <!-- Combined View -->
+      <section class="sidebar-section">
+        <h3 class="section-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Combined Analysis
+        </h3>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <button class="btn btn-primary" id="btn-load-all" style="width:100%;justify-content:center;">
+            🔗 Load All Files Together
+          </button>
+          <button class="btn btn-danger" id="btn-suspected-only" style="width:100%;justify-content:center;">
+            ⚠ Suspected Networks Only
+          </button>
+        </div>
+        <p style="font-size:10px;color:#4e637d;margin-top:6px;line-height:1.4;">
+          Loads all 5 datasets simultaneously and finds cross-file links between the same persons.
+        </p>
+      </section>
+
+      <!-- Individual Datasets -->
+      <section class="sidebar-section">
+        <h3 class="section-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Individual Datasets
+        </h3>
+        <div class="dataset-list" id="dataset-list">
+          <div class="dataset-loading">Connecting to backend…</div>
+        </div>
+      </section>
+
+      <!-- Filters -->
+      <section class="sidebar-section" id="filter-section" style="display:none;">
+        <h3 class="section-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          View Filters
+        </h3>
+        <div class="filter-group">
+          <label class="filter-toggle">
+            <input type="checkbox" id="filter-criminals" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-label">Known criminals</span>
+          </label>
+          <label class="filter-toggle">
+            <input type="checkbox" id="filter-civilians" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-label">Civilians / unknowns</span>
+          </label>
+          <label class="filter-toggle">
+            <input type="checkbox" id="filter-suspicious" checked />
+            <span class="toggle-track"></span>
+            <span class="toggle-label">Highlight suspicious edges</span>
+          </label>
+        </div>
+      </section>
+
+      <!-- Legend -->
+      <section class="sidebar-section" id="legend-section" style="display:none;">
+        <h3 class="section-title">Legend</h3>
+        <div class="legend-grid">
+          <div class="legend-item"><div class="legend-dot criminal"></div><span>Known Criminal</span></div>
+          <div class="legend-item"><div class="legend-dot civilian"></div><span>Civilian</span></div>
+          <div class="legend-item"><div class="legend-dot stolen"></div><span>Stolen Vehicle</span></div>
+          <div class="legend-item"><div class="legend-line phone"></div><span>Phone Call</span></div>
+          <div class="legend-item"><div class="legend-line financial"></div><span>Financial</span></div>
+          <div class="legend-item"><div class="legend-line vehicle"></div><span>Vehicle Transfer</span></div>
+          <div class="legend-item"><div class="legend-line suspicious"></div><span>Suspicious</span></div>
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- CANVAS -->
+    <div class="canvas-wrapper" id="canvas-wrapper">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">
+          <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+        <h2>No Network Loaded</h2>
+        <p>Use "Load All Files Together" to see the full criminal network across all datasets, or pick a single dataset from the sidebar.</p>
+        <button class="btn btn-primary" id="btn-load-all-quick">🔗 Load All Files Together</button>
+      </div>
+
+      <svg id="graph-svg" class="graph-svg hidden">
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+            <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <g id="graph-root"></g>
+      </svg>
+
+      <!-- Info banner (shows for enrichment-only files) -->
+      <div class="info-banner hidden" id="info-banner">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="info-banner-text"></span>
+      </div>
+
+      <!-- Zoom controls -->
+      <div class="zoom-controls hidden" id="zoom-controls">
+        <button class="zoom-btn" id="zoom-in">+</button>
+        <button class="zoom-btn" id="zoom-fit">⊡</button>
+        <button class="zoom-btn" id="zoom-out">−</button>
+      </div>
+    </div>
+
+    <!-- RIGHT DETAIL PANEL -->
+    <aside class="detail-panel" id="detail-panel">
+      <div class="detail-header">
+        <h3 class="detail-title" id="detail-title">Details</h3>
+        <button class="detail-close" id="detail-close">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="detail-body" id="detail-body"></div>
+    </aside>
+
+  </main>
+
+  <!-- AI Modal -->
+  <div class="modal-overlay hidden" id="ai-modal-overlay">
+    <div class="ai-modal">
+      <div class="ai-modal-header">
+        <div class="ai-badge">
+          <div class="ai-badge-dot"></div>
+          <span id="ai-modal-title">Groq AI Analysis</span>
+        </div>
+        <button class="detail-close" id="ai-modal-close">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="ai-modal-body" id="ai-modal-body">
+        <div class="ai-thinking"><div class="spinner"></div><span>Connecting to Groq AI…</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tooltip -->
+  <div class="graph-tooltip hidden" id="graph-tooltip"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

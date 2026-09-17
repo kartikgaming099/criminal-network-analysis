@@ -1,0 +1,50 @@
+person_id,name,is_criminal,cluster,account_no,bank,ifsc,account_type
+P001,Rakesh Kumar,True,C1,32412415786,SBI,SBIN0506743,Current
+P002,Sunil Malik,True,C1,68040380973,ICICI Bank,ICIC0155035,Current
+P003,Ajay Yadav,True,C1,18633362450,HDFC Bank,HDFC0212332,Current
+P004,Vikas Tomar,True,C1,55933722348,ICICI Bank,ICIC0269924,Current
+P005,Imran Sheikh,True,C2,42679916140,HDFC Bank,HDFC0955680,Current
+P006,Deepak Chaudhary,True,C2,54219677717,ICICI Bank,ICIC0374905,Current
+P007,Salman Qureshi,True,C2,43686792403,SBI,SBIN0937826,Current
+P008,Kavita Devi,True,C2,65580053757,Bank of Baroda,BARB0656605,Current
+P009,Nikhil Sharma,True,C3,64733283579,Punjab National Bank,PUNB0778548,Current
+P010,Amit Verma,True,C3,08198427361,SBI,SBIN0543203,Savings
+P011,Rohit Bansal,True,C3,38037979360,ICICI Bank,ICIC0480168,Current
+P101,Bhola Prasad,True,,16568651026,ICICI Bank,ICIC0254454,Savings
+P102,Chhotu Ansari,True,,80450816830,SBI,SBIN0629900,Current
+P103,Lakhan Singh Bhatti,True,,05606834229,SBI,SBIN0887476,Current
+P104,Munna Tyagi,True,,88481678051,Punjab National Bank,PUNB0642172,Savings
+P105,Pappu Solanki,True,,90413217740,Kotak Mahindra Bank,KKBK0183382,Current
+P106,Guddi Bai,True,,82760561101,SBI,SBIN0691787,Savings
+P107,Chandu Meena,True,,44396022575,Axis Bank,UTIB0601215,Savings
+P108,Rustam Ali,True,,24798510995,Bank of Baroda,BARB0790481,Current
+C300,Mahesh Chand Gupta,False,,49471531912,ICICI Bank,ICIC0442895,Savings
+C301,Suresh Kumar Jain,False,,68826141830,Axis Bank,UTIB0157708,Current
+C302,Priya Singh,False,,69705333835,SBI,SBIN0595709,Current
+C303,Ramesh Chandra Pandey,False,,18056893044,Punjab National Bank,PUNB0411914,Savings
+C304,Anita Rani,False,,41992454521,Axis Bank,UTIB0403670,Savings
+C305,Naveen Kumar Sharma,False,,78264257436,SBI,SBIN0757869,Current
+C306,Farhan Ahmed,False,,44760461844,Punjab National Bank,PUNB0200747,Current
+C307,Sanjay Bhardwaj,False,,35244533458,Punjab National Bank,PUNB0170192,Savings
+C308,Rekha Devi,False,,36247945967,Bank of Baroda,BARB0472747,Current
+C309,Vivek Malhotra,False,,94695183670,Axis Bank,UTIB0578823,Current
+C310,Pranay Dutta Roy,False,,79909315319,Axis Bank,UTIB0769030,Savings
+C311,Kavya Reddy,False,,43588299843,HDFC Bank,HDFC0900956,Current
+C312,Arjun Mehta,False,,41492355953,ICICI Bank,ICIC0914654,Current
+C313,Simran Kaur,False,,23680352646,Kotak Mahindra Bank,KKBK0450872,Current
+C314,Rohan Kapoor,False,,64281559570,HDFC Bank,HDFC0285673,Current
+C315,Neha Agarwal,False,,86831863542,Axis Bank,UTIB0369998,Savings
+C316,Tanvi Joshi,False,,99323421683,HDFC Bank,HDFC0211951,Savings
+C317,Aditya Rathore,False,,93902439957,Axis Bank,UTIB0904308,Current
+C318,Ishita Bose,False,,71327117523,SBI,SBIN0186464,Savings
+C319,Karan Malhotra,False,,09094330418,HDFC Bank,HDFC0742118,Savings
+C320,Meera Nair,False,,75073462726,ICICI Bank,ICIC0144599,Current
+C321,Yash Chopra,False,,10884387334,Bank of Baroda,BARB0554694,Savings
+C322,Abid Khan,False,,65117077513,Kotak Mahindra Bank,KKBK0989612,Current
+C323,Rajesh Sinha,False,,64162634588,SBI,SBIN0849877,Savings
+C324,Farhana Begum,False,,52365451928,Kotak Mahindra Bank,KKBK0311772,Savings
+C325,Deepak Yadav,False,,76092570588,SBI,SBIN0987054,Current
+C326,Sunita Rawat,False,,35059071685,HDFC Bank,HDFC0985571,Savings
+C327,Irfan Ali,False,,38708135078,Axis Bank,UTIB0310445,Current
+C328,Poonam Chawla,False,,68815550998,Punjab National Bank,PUNB0917749,Savings
+C329,Manoj Tiwari,False,,32437664397,Kotak Mahindra Bank,KKBK0389779,Savings
