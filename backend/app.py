@@ -28,13 +28,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
-from graph_engine import build_graph_from_csv, build_combined_graph
+from graph_engine import build_graph_from_csv, build_combined_graph, find_path_conduit
 from ai_engine import (
     guess_crime_pattern,
     explain_edge,
     detect_anomalies,
     score_person_risk,
     generate_case_summary,
+    explain_path_conduit,
 )
 
 # ─── App setup ─────────────────────────────────────────────────────────────────
@@ -328,6 +329,48 @@ def analyze_summary():
     except Exception as e:
         traceback.print_exc()
         return _error(str(e), 500)
+
+
+@app.route('/api/analyze/path', methods=['POST'])
+def analyze_path():
+    """
+    Find shortest conduit path between source and target and synthesize AI explanation.
+    Body: { "nodes": [...], "edges": [...], "source": "Name A", "target": "Name B", "with_ai": bool }
+    """
+    body     = request.get_json(force=True, silent=True) or {}
+    nodes    = body.get('nodes', [])
+    edges    = body.get('edges', [])
+    source   = str(body.get('source', '')).strip()
+    target   = str(body.get('target', '')).strip()
+    with_ai  = bool(body.get('with_ai', True))
+
+    if not source or not target:
+        return _error("source and target are required")
+
+    try:
+        res = find_path_conduit(nodes, edges, source, target)
+        if not res.get('found'):
+            return _ok({'path_result': res, 'explanation': res.get('message', 'No path found.')})
+
+        explanation = ""
+        if with_ai and res.get('steps'):
+            explanation = explain_path_conduit(
+                source=res['source'],
+                target=res['target'],
+                hops=res['hops'],
+                steps=res['steps'],
+                intermediaries=res['intermediaries'],
+                total_amount=res['total_amount'],
+                channel_types=res['channel_types']
+            )
+        elif not res.get('steps'):
+            explanation = f"Source and target are the same entity ({source})."
+
+        return _ok({'path_result': res, 'explanation': explanation})
+    except Exception as e:
+        traceback.print_exc()
+        return _error(str(e), 500)
+
 
 
 # ─── Entry point ───────────────────────────────────────────────────────────────

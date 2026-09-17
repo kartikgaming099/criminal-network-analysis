@@ -96,6 +96,16 @@
         <span>Pattern Anomalies</span>
       </button>
 
+      <button class="btn btn-primary" id="btn-path-tracer" style="display:none;background:linear-gradient(135deg, rgba(6,182,212,0.2) 0%, rgba(14,116,144,0.3) 100%);border-color:rgba(6,182,212,0.4);color:#38bdf8;" title="Intermediary Link &amp; Path Conduit Tracer (T)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="6" cy="6" r="3"/>
+          <circle cx="18" cy="18" r="3"/>
+          <path d="M6 9v3a3 3 0 0 0 3 3h6"/>
+          <polyline points="15 12 18 15 15 18"/>
+        </svg>
+        <span>Path Tracer</span>
+      </button>
+
       <button class="btn btn-criminals" id="btn-criminals-output" style="display:none;" title="View Criminals-Only Network Output">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -422,6 +432,10 @@
             <div class="shortcut-keys"><kbd class="kbd-key">P</kbd></div>
           </div>
           <div class="shortcut-item">
+            <div class="shortcut-desc">Toggle Intermediary Path Tracer</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">T</kbd></div>
+          </div>
+          <div class="shortcut-item">
             <div class="shortcut-desc">Synthesize Case Briefing Dossier</div>
             <div class="shortcut-keys"><kbd class="kbd-key">S</kbd></div>
           </div>
@@ -492,6 +506,75 @@
       </div>
       <div class="poi-body" id="poi-body">
         <div class="poi-empty">Loading registry…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Intermediary Link & Path Tracer Modal -->
+  <div class="modal-overlay hidden" id="path-modal-overlay">
+    <div class="ai-modal path-tracer-modal">
+      <div class="ai-modal-header">
+        <div class="ai-badge">
+          <span class="status-indicator" style="background:#06b6d4;box-shadow:0 0 0 3px rgba(6,182,212,0.2);"></span>
+          <div>
+            <div class="dossier-heading-text">INTERMEDIARY LINK &amp; CONDUIT TRACER</div>
+            <span class="dossier-sub-text">FORENSIC MULTI-HOP CONNECTION &amp; MONEY TRAIL DISCOVERY</span>
+          </div>
+        </div>
+        <button class="detail-close" id="path-modal-close" title="Close Path Tracer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="path-modal-body">
+        <!-- Target Selector Controls -->
+        <div class="path-controls-card">
+          <div class="path-input-group">
+            <label class="path-input-label">ORIGIN (TARGET A)</label>
+            <div class="path-select-wrap">
+              <input type="text" id="path-source-input" class="path-input" list="entities-datalist" placeholder="Search origin entity..." autocomplete="off" />
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-icon-only" id="btn-path-swap" title="Swap Origin &amp; Destination">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="17 1 21 5 17 9"/>
+              <path d="M3 5h18"/>
+              <polyline points="7 23 3 19 7 15"/>
+              <path d="M21 19H3"/>
+            </svg>
+          </button>
+          <div class="path-input-group">
+            <label class="path-input-label">DESTINATION (TARGET B)</label>
+            <div class="path-select-wrap">
+              <input type="text" id="path-target-input" class="path-input" list="entities-datalist" placeholder="Search destination entity..." autocomplete="off" />
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-run-path-trace">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span>Trace Conduit</span>
+          </button>
+        </div>
+
+        <!-- Datalist for entity autocomplete -->
+        <datalist id="entities-datalist"></datalist>
+
+        <!-- Result Container -->
+        <div class="path-results-container" id="path-results-container">
+          <div class="path-placeholder">
+            <div class="path-placeholder-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/>
+                <path d="M6 9v3a3 3 0 0 0 3 3h6"/><polyline points="15 12 18 15 15 18"/>
+              </svg>
+            </div>
+            <div class="path-placeholder-title">Select Origin &amp; Destination Entities</div>
+            <p class="path-placeholder-desc">Choose two individuals above or click &ldquo;Trace Path&rdquo; from any subject dossier in the inspector to discover intermediary relays, conduit transaction volumes, and AI forensic analysis.</p>
+          </div>
+        </div>
       </div>
     </div>
   </div>

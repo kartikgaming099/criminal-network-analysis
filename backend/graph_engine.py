@@ -644,3 +644,124 @@ def _safe_dict(p: dict) -> dict:
         else:
             out[k] = str(v)
     return out
+
+
+# ── Path & Intermediary Link Tracer ───────────────────────────────────────────
+
+def find_path_conduit(nodes: list, edges: list, source: str, target: str) -> dict:
+    """
+    Find shortest forensic conduit path(s) between source and target entities.
+    Returns structured step-by-step hops, intermediary nodes, transaction totals,
+    and channel classifications.
+    """
+    if not source or not target:
+        return {'found': False, 'error': 'Source and Target are required.'}
+
+    if source == target:
+        return {
+            'found': True,
+            'source': source,
+            'target': target,
+            'hops': 0,
+            'shortest_path': [source],
+            'all_paths': [[source]],
+            'intermediaries': [],
+            'steps': [],
+            'total_amount': 0,
+            'channel_types': [],
+            'has_criminal': False,
+            'has_suspicious': False,
+        }
+
+    G = nx.Graph()
+    node_map = {n['id']: n for n in nodes}
+    for n in nodes:
+        G.add_node(n['id'], **n)
+
+    edge_lookup = {}
+    for e in edges:
+        src = e['source']
+        tgt = e['target']
+        G.add_edge(src, tgt, **e)
+        key = tuple(sorted([src, tgt]))
+        edge_lookup.setdefault(key, []).append(e)
+
+    if source not in G or target not in G:
+        return {
+            'found': False,
+            'error': f"Entity not found in active canvas: '{source if source not in G else target}'."
+        }
+
+    if not nx.has_path(G, source, target):
+        return {
+            'found': False,
+            'source': source,
+            'target': target,
+            'message': f"No connected pathway exists between '{source}' and '{target}' in the current network scope."
+        }
+
+    try:
+        raw_paths = list(nx.all_shortest_paths(G, source=source, target=target))
+    except Exception:
+        try:
+            raw_paths = [nx.shortest_path(G, source=source, target=target)]
+        except Exception as e:
+            return {'found': False, 'error': str(e)}
+
+    primary_path = raw_paths[0]
+    intermediaries = primary_path[1:-1]
+    hops = len(primary_path) - 1
+
+    steps = []
+    total_amount = 0
+    channel_types = set()
+    has_suspicious = False
+    has_criminal = any(node_map.get(m, {}).get('is_criminal', False) for m in intermediaries)
+
+    for i in range(len(primary_path) - 1):
+        u = primary_path[i]
+        v = primary_path[i + 1]
+        pair_key = tuple(sorted([u, v]))
+        conn_edges = edge_lookup.get(pair_key, [])
+        primary_edge = conn_edges[0] if conn_edges else {}
+
+        edge_type = primary_edge.get('type', 'connected')
+        channel_types.add(edge_type)
+        desc = primary_edge.get('description', '')
+        amt = primary_edge.get('total_amount') or 0
+        total_amount += amt
+        if primary_edge.get('suspicious', False):
+            has_suspicious = True
+
+        u_node = node_map.get(u, {})
+        v_node = node_map.get(v, {})
+
+        steps.append({
+            'step_num': i + 1,
+            'from': u,
+            'to': v,
+            'from_criminal': bool(u_node.get('is_criminal', False)),
+            'to_criminal': bool(v_node.get('is_criminal', False)),
+            'edge_type': edge_type,
+            'description': desc,
+            'total_amount': amt,
+            'txn_count': primary_edge.get('txn_count'),
+            'suspicious': bool(primary_edge.get('suspicious', False)),
+        })
+
+    return {
+        'found': True,
+        'source': source,
+        'target': target,
+        'hops': hops,
+        'shortest_path': primary_path,
+        'all_paths': raw_paths[:5],
+        'intermediaries': intermediaries,
+        'intermediary_details': [node_map.get(m, {'id': m}) for m in intermediaries],
+        'steps': steps,
+        'total_amount': total_amount,
+        'channel_types': list(channel_types),
+        'has_criminal': has_criminal,
+        'has_suspicious': has_suspicious,
+    }
+

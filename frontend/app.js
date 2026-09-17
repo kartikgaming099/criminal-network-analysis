@@ -246,7 +246,10 @@ function renderGraph(data, filename) {
   $('stat-num-links').textContent    = data.stats.total_edges;
   $('stat-num-clusters').textContent = data.stats.total_clusters;
   el.graphStats.style.display = 'flex';
-  ['btn-poi','btn-summary','btn-anomalies','btn-criminals-output','btn-reset'].forEach(id => $(id).style.display = '');
+  ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-criminals-output','btn-reset'].forEach(id => {
+    if ($(id)) $(id).style.display = '';
+  });
+  populatePathDatalist();
   el.filterSec.style.display = '';
   el.legendSec.style.display = '';
 
@@ -465,8 +468,8 @@ function clearHighlights() {
   activeNodeId      = null;
   activeEdge        = null;
   isolatedClusterId = null;
-  d3.selectAll('.edge-line').attr('opacity', null).classed('highlighted', false);
-  d3.selectAll('.node-circle').attr('opacity', null).attr('r', d => nodeR(d)).attr('stroke-width', 2.2);
+  d3.selectAll('.edge-line').attr('opacity', null).classed('highlighted', false).classed('path-conduit', false);
+  d3.selectAll('.node-circle').attr('opacity', null).attr('r', d => nodeR(d)).attr('stroke-width', 2.2).classed('path-conduit-node', false);
   d3.selectAll('.node-g').attr('opacity', null);
   d3.selectAll('.node-label').classed('selected', false);
   d3.selectAll('.cluster-group').attr('opacity', null);
@@ -514,6 +517,12 @@ function renderNodeDetail(node, connEdges, nodeMap) {
         <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
       </svg>
       <span>Focus</span>
+    </button>
+    <button class="btn btn-sm btn-primary" onclick="openPathTracerWithSource('${escapeHtml(node.id)}')" title="Trace multi-hop path conduit from this entity">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M6 9v3a3 3 0 0 0 3 3h6"/><polyline points="15 12 18 15 15 18"/>
+      </svg>
+      <span>Trace Path</span>
     </button>
     <button class="btn btn-sm btn-ghost" onclick="copyTextToClipboard('${escapeHtml(node.id)}', 'Entity ID copied to clipboard')" title="Copy Subject ID">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1040,7 +1049,9 @@ function initButtons() {
     el.graphSvg.classList.add('hidden');
     el.zoomCtrls.classList.add('hidden');
     el.graphStats.style.display = 'none';
-    ['btn-poi','btn-summary','btn-anomalies','btn-criminals-output','btn-reset'].forEach(id => $(id).style.display = 'none');
+    ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-criminals-output','btn-reset'].forEach(id => {
+      if ($(id)) $(id).style.display = 'none';
+    });
     el.filterSec.style.display = 'none';
     el.legendSec.style.display = 'none';
     hideBanner();
@@ -1053,8 +1064,9 @@ function initButtons() {
     $('search-dropdown')?.classList.add('hidden');
     const searchInput = $('node-search-input');
     if (searchInput) searchInput.value = '';
-    // close criminals panel too
+    // close criminals and path panel too
     closeCriminalsOutput();
+    closePathTracer();
   });
 
   $('btn-load-all').addEventListener('click', () => loadAllFiles(false));
@@ -1065,6 +1077,23 @@ function initButtons() {
   $('criminals-output-close')?.addEventListener('click', () => closeCriminalsOutput());
   $('criminals-output-overlay')?.addEventListener('click', e => {
     if (e.target === $('criminals-output-overlay')) closeCriminalsOutput();
+  });
+
+  // Path Tracer
+  $('btn-path-tracer')?.addEventListener('click', () => openPathTracer());
+  $('path-modal-close')?.addEventListener('click', () => closePathTracer());
+  $('path-modal-overlay')?.addEventListener('click', e => {
+    if (e.target === $('path-modal-overlay')) closePathTracer();
+  });
+  $('btn-run-path-trace')?.addEventListener('click', () => runPathTrace(true));
+  $('btn-path-swap')?.addEventListener('click', () => {
+    const s = $('path-source-input');
+    const t = $('path-target-input');
+    if (s && t) {
+      const tmp = s.value;
+      s.value = t.value;
+      t.value = tmp;
+    }
   });
 
   initLegendFilters();
@@ -1391,6 +1420,7 @@ function initKeyboardNav() {
       $('shortcuts-modal-overlay')?.classList.add('hidden');
       el.aiModal?.classList.add('hidden');
       el.poiOverlay?.classList.add('hidden');
+      $('path-modal-overlay')?.classList.add('hidden');
       closeCriminalsOutput();
       closeDetailPanel();
       clearHighlights();
@@ -1437,6 +1467,11 @@ function initKeyboardNav() {
       const ov = $('criminals-output-overlay');
       if (ov && !ov.classList.contains('hidden')) closeCriminalsOutput();
       else openCriminalsOutput();
+    } else if (e.key.toLowerCase() === 't') {
+      e.preventDefault();
+      const ov = $('path-modal-overlay');
+      if (ov && !ov.classList.contains('hidden')) closePathTracer();
+      else openPathTracer();
     } else if (e.key.toLowerCase() === 'p') {
       e.preventDefault();
       $('btn-poi')?.click();
@@ -1881,3 +1916,270 @@ function renderCriminalsGraph(nodes, edges) {
 
 window.openCriminalsOutput  = openCriminalsOutput;
 window.closeCriminalsOutput = closeCriminalsOutput;
+
+// ── FEATURE 1: Intermediary Link & Path Conduit Tracer ─────────────────────────
+let activePathConduit = null;
+
+function populatePathDatalist() {
+  const datalist = $('entities-datalist');
+  if (!datalist || !graphData || !graphData.nodes) return;
+  datalist.innerHTML = '';
+  graphData.nodes.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n.id;
+    opt.label = `${n.id}${n.is_criminal ? ' [PRIORITY POI]' : ''}`;
+    datalist.appendChild(opt);
+  });
+}
+
+function openPathTracer() {
+  if (!graphData) return;
+  const modal = $('path-modal-overlay');
+  if (!modal) return;
+  populatePathDatalist();
+  modal.classList.remove('hidden');
+
+  // If no source is selected and we have an active node, pre-fill it
+  const srcInput = $('path-source-input');
+  if (srcInput && !srcInput.value && activeNodeId) {
+    srcInput.value = activeNodeId;
+  }
+}
+
+function closePathTracer() {
+  const modal = $('path-modal-overlay');
+  if (modal) modal.classList.add('hidden');
+}
+
+function openPathTracerWithSource(nodeId) {
+  openPathTracer();
+  const srcInput = $('path-source-input');
+  const tgtInput = $('path-target-input');
+  if (srcInput) srcInput.value = nodeId;
+  if (tgtInput) tgtInput.focus();
+}
+
+async function runPathTrace(withAi = true) {
+  if (!graphData) return;
+  const src = $('path-source-input')?.value?.trim();
+  const tgt = $('path-target-input')?.value?.trim();
+
+  if (!src || !tgt) {
+    showBanner('Please specify both Origin and Destination entities to trace conduit.', 'danger');
+    return;
+  }
+
+  const resContainer = $('path-results-container');
+  if (resContainer) {
+    resContainer.innerHTML = `
+      <div class="ai-thinking">
+        <div class="spinner"></div>
+        <span>Tracing multi-hop conduit &amp; synthesizing forensic intelligence…</span>
+      </div>`;
+  }
+
+  try {
+    const res = await fetch(`${API}/analyze/path`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        nodes: graphData.nodes,
+        edges: graphData.edges,
+        source: src,
+        target: tgt,
+        with_ai: withAi,
+      }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+
+    renderPathResults(json.path_result, json.explanation);
+  } catch (err) {
+    if (resContainer) {
+      resContainer.innerHTML = `
+        <div class="ai-section-value danger">
+          <strong>Path Tracing Failed:</strong> ${escapeHtml(err.message)}
+        </div>`;
+    }
+  }
+}
+
+function renderPathResults(pathRes, explanation) {
+  const container = $('path-results-container');
+  if (!container) return;
+
+  if (!pathRes || !pathRes.found) {
+    container.innerHTML = `
+      <div class="ai-section-value warning" style="text-align:center;padding:18px;">
+        <div style="font-family:var(--font-mono);font-size:12px;font-weight:700;margin-bottom:6px;color:#f59e0b;">
+          NO DIRECT OR INDIRECT PATH CONDUIT DISCOVERED
+        </div>
+        <p style="font-size:12px;color:#94a3b8;margin:0;">
+          ${escapeHtml(pathRes?.message || 'No linked path exists between the selected entities in the active network scope.')}
+        </p>
+      </div>`;
+    return;
+  }
+
+  activePathConduit = pathRes;
+
+  const hops = pathRes.hops;
+  const intermediaries = pathRes.intermediaries || [];
+  const steps = pathRes.steps || [];
+  const totalAmt = pathRes.total_amount || 0;
+  const channelTypes = pathRes.channel_types || [];
+  const hasCrim = pathRes.has_criminal;
+  const hasSusp = pathRes.has_suspicious;
+
+  let h = '';
+
+  // KPI Metrics Grid
+  h += `<div class="path-kpi-grid">
+    <div class="path-kpi-card">
+      <span class="path-kpi-val cyan">${hops} ${hops === 1 ? 'Hop' : 'Hops'}</span>
+      <span class="path-kpi-lbl">DISTANCE (DEGREES)</span>
+    </div>
+    <div class="path-kpi-card">
+      <span class="path-kpi-val ${intermediaries.length ? 'warning' : 'cyan'}">${intermediaries.length}</span>
+      <span class="path-kpi-lbl">INTERMEDIARY RELAYS</span>
+    </div>
+    <div class="path-kpi-card">
+      <span class="path-kpi-val ${totalAmt > 0 ? 'success' : ''}">₹${totalAmt.toLocaleString('en-IN')}</span>
+      <span class="path-kpi-lbl">TOTAL MONETARY FLOW</span>
+    </div>
+    <div class="path-kpi-card">
+      <span class="path-kpi-val ${hasCrim || hasSusp ? 'danger' : 'success'}">${hasCrim ? 'HIGH RISK' : hasSusp ? 'SUSPICIOUS' : 'STANDARD'}</span>
+      <span class="path-kpi-lbl">CONDUIT THREAT LEVEL</span>
+    </div>
+  </div>`;
+
+  // AI Forensic Conduit Synthesis
+  if (explanation) {
+    h += `<div class="ai-section" style="margin-top:6px;">
+      <div class="ai-section-label">FORENSIC CONDUIT INTELLIGENCE SYNTHESIS</div>
+      <div class="ai-section-value highlight">
+        ${escapeHtml(explanation)}
+      </div>
+    </div>`;
+  }
+
+  // Step-by-Step Conduit Trail
+  if (steps.length) {
+    h += `<div class="path-timeline-trail">
+      <div class="path-trail-header">
+        <span class="path-trail-title">STEP-BY-STEP INVESTIGATIVE CONDUIT TRAIL</span>
+        <div style="display:flex;gap:4px;">
+          ${channelTypes.map(c => badge(c, tagCls(c))).join('')}
+        </div>
+      </div>`;
+
+    steps.forEach(s => {
+      const amtStr = s.total_amount ? ` · ₹${s.total_amount.toLocaleString('en-IN')}` : '';
+      const suspTag = s.suspicious ? '<span class="badge suspicious" style="margin-left:4px;">FLAGGED</span>' : '';
+      h += `<div class="path-step-card">
+        <div class="path-step-badge">${s.step_num}</div>
+        <div class="path-step-content">
+          <div class="path-step-entities">
+            <span class="entity-tag ${s.from_criminal ? 'criminal' : ''}">${escapeHtml(s.from)}</span>
+            <span class="path-step-arrow">⟶</span>
+            <span class="entity-tag ${s.to_criminal ? 'criminal' : ''}">${escapeHtml(s.to)}</span>
+            <span class="badge ${tagCls(s.edge_type)}" style="margin-left:auto;">${escapeHtml(s.edge_type)}${amtStr}</span>
+            ${suspTag}
+          </div>
+          <div class="path-step-desc">${escapeHtml(s.description || 'Direct relational linkage documented.')}</div>
+        </div>
+      </div>`;
+    });
+
+    h += `</div>`;
+  }
+
+  // Action Buttons
+  h += `<div class="path-actions-bar">
+    <button class="btn btn-ghost" onclick="clearPathHighlight()">Clear Canvas Conduit</button>
+    <button class="btn btn-primary" onclick="isolateConduitOnCanvas()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      <span>Isolate &amp; Glow on Canvas</span>
+    </button>
+  </div>`;
+
+  container.innerHTML = h;
+}
+
+function isolateConduitOnCanvas() {
+  if (!activePathConduit || !activePathConduit.shortest_path) return;
+  highlightPathOnCanvas(activePathConduit.shortest_path);
+  closePathTracer();
+  showBanner(`ISOLATING CONDUIT: ${activePathConduit.source} ⟶ ${activePathConduit.target} (${activePathConduit.hops} hops) · Click Clear Canvas to reset`, 'info');
+}
+
+function highlightPathOnCanvas(pathNodes) {
+  if (!pathNodes || pathNodes.length === 0 || !activeNodeMap) return;
+
+  const pathNodeSet = new Set(pathNodes);
+  const pathEdgePairs = new Set();
+  for (let i = 0; i < pathNodes.length - 1; i++) {
+    const u = pathNodes[i];
+    const v = pathNodes[i + 1];
+    pathEdgePairs.add(`${u}__${v}`);
+    pathEdgePairs.add(`${v}__${u}`);
+  }
+
+  // Reset any other selections
+  activeNodeId = null;
+  activeEdge = null;
+  isolatedClusterId = null;
+  d3.selectAll('.cluster-group').attr('opacity', null);
+
+  // Style nodes
+  d3.selectAll('.node-g')
+    .attr('opacity', d => pathNodeSet.has(d.id) ? 1 : 0.05);
+
+  d3.selectAll('.node-circle')
+    .classed('path-conduit-node', d => pathNodeSet.has(d.id))
+    .attr('r', d => pathNodeSet.has(d.id) ? nodeR(d) + 4 : nodeR(d));
+
+  // Style edges
+  d3.selectAll('.edge-line')
+    .classed('path-conduit', d => pathEdgePairs.has(`${d.source}__${d.target}`))
+    .attr('opacity', d => pathEdgePairs.has(`${d.source}__${d.target}`) ? 1 : 0.02);
+
+  // Zoom to fit path bounding box
+  const nodesOnPath = pathNodes.map(id => activeNodeMap[id]).filter(Boolean);
+  if (nodesOnPath.length > 0 && svgSel && zoomBehavior) {
+    const minX = Math.min(...nodesOnPath.map(n => n.x)) - 100;
+    const maxX = Math.max(...nodesOnPath.map(n => n.x)) + 100;
+    const minY = Math.min(...nodesOnPath.map(n => n.y)) - 100;
+    const maxY = Math.max(...nodesOnPath.map(n => n.y)) + 100;
+
+    const wrapper = $('canvas-wrapper');
+    const W = wrapper.clientWidth  || 900;
+    const H = wrapper.clientHeight || 700;
+
+    const dx = maxX - minX || 100;
+    const dy = maxY - minY || 100;
+    const scale = Math.min(2.5, Math.max(0.3, 0.85 / Math.max(dx / W, dy / H)));
+    const tx = W / 2 - scale * ((minX + maxX) / 2);
+    const ty = H / 2 - scale * ((minY + maxY) / 2);
+
+    svgSel.transition().duration(850).call(
+      zoomBehavior.transform,
+      d3.zoomIdentity.translate(tx, ty).scale(scale)
+    );
+  }
+}
+
+function clearPathHighlight() {
+  clearHighlights();
+  activePathConduit = null;
+}
+
+window.openPathTracer            = openPathTracer;
+window.closePathTracer           = closePathTracer;
+window.openPathTracerWithSource  = openPathTracerWithSource;
+window.runPathTrace              = runPathTrace;
+window.isolateConduitOnCanvas    = isolateConduitOnCanvas;
+window.clearPathHighlight        = clearPathHighlight;
+

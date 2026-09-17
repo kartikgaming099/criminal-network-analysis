@@ -479,3 +479,48 @@ RECOMMENDED ACTIONS: (3-4 specific investigative steps)"""
         )
 
     return result
+
+
+# ─── Path Conduit Synthesizer ───────────────────────────────────────────────────
+
+PATH_SYSTEM_PROMPT = """You are a forensic criminal intelligence analyst.
+Analyze the intermediary connection chain (conduit) between two suspects in an investigation.
+Highlight who the intermediaries/cutouts are, the conduit mechanisms (financial wires, phone calls, asset transfers),
+and what this path reveals about the operational relationship between Person A and Person B.
+Be concise (2-4 sentences max), sharp, and professional."""
+
+def explain_path_conduit(source: str, target: str, hops: int, steps: list,
+                         intermediaries: list, total_amount: float,
+                         channel_types: list) -> str:
+    """
+    Generate an AI assessment of the connection conduit between two targets.
+    """
+    steps_str = "\n".join([
+        f"- Hop {s['step_num']}: {s['from']} → {s['to']} via [{s['edge_type']}] {s['description']}"
+        for s in steps[:8]
+    ])
+
+    user_prompt = f"""Investigative Link Conduit Analysis:
+Target A (Origin): {source}
+Target B (Destination): {target}
+Total Intermediary Hops: {hops}
+Intermediary Entities ({len(intermediaries)}): {', '.join(intermediaries) if intermediaries else 'Direct Connection'}
+Channel Types: {', '.join(channel_types)}
+Total Financial Flow across Conduit: ₹{total_amount:,.0f}
+
+STEP-BY-STEP CONDUIT HOPS:
+{steps_str}
+
+Provide a 2-3 sentence forensic synthesis explaining the significance of this chain and the role of the intermediaries."""
+
+    res = _call_groq(PATH_SYSTEM_PROMPT, user_prompt, max_tokens=220)
+    if res.startswith('[Groq AI Error:'):
+        if not intermediaries:
+            return f"Direct forensic link established between {source} and {target} across {', '.join(channel_types) or 'relational channels'}. Indicates direct operational contact or transactional coordination."
+        return (
+            f"Multi-hop forensic conduit connects {source} and {target} across {hops} hop(s) via intermediate cutouts ({', '.join(intermediaries)}). "
+            f"Conduit leverages {', '.join(channel_types)} with aggregate monetary movement of ₹{total_amount:,.0f}. "
+            f"Intermediaries function as transactional relays or communication cutouts insulating key principals."
+        )
+    return res
+
