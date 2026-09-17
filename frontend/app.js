@@ -831,6 +831,154 @@ $('zoom-fit').addEventListener('click', () => {
   );
 });
 
+// ── Forensic Evidence Export (PNG & JSON) ──────────────────────────────────────
+$('btn-export-png')?.addEventListener('click', () => exportEvidencePNG());
+$('btn-export-json')?.addEventListener('click', () => exportGraphJSON());
+
+function exportGraphJSON() {
+  if (!graphData) {
+    showBanner('No active investigation data to export.', 'warning');
+    return;
+  }
+  const payload = {
+    exported_at: new Date().toISOString(),
+    case_ref: 'SIH-26189',
+    classification: 'LE SENSITIVE // FORENSIC INTELLIGENCE',
+    stats: graphData.stats,
+    nodes: graphData.nodes,
+    edges: graphData.edges,
+    clusters: graphData.clusters,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.download = `crimenet_evidence_graph_${Date.now()}.json`;
+  a.href = url;
+  a.click();
+  URL.revokeObjectURL(url);
+  showBanner('Forensic graph JSON exported successfully.', 'success');
+}
+
+function exportEvidencePNG() {
+  if (!graphData || !svgSel) {
+    showBanner('No active investigation data to export.', 'warning');
+    return;
+  }
+
+  showLoading('Rendering forensic evidence snapshot…');
+
+  const svgNode = el.graphSvg;
+  const rect = svgNode.getBoundingClientRect();
+  const width = Math.max(900, Math.round(rect.width));
+  const height = Math.max(650, Math.round(rect.height));
+  const footerHeight = 36;
+  const totalHeight = height + footerHeight;
+
+  // Clone SVG node and prepare for canvas serialization
+  const clonedSvg = svgNode.cloneNode(true);
+  clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clonedSvg.setAttribute('width', width);
+  clonedSvg.setAttribute('height', height);
+
+  // Embed critical stylesheet rules to guarantee exact appearance in off-screen render
+  const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+  styleEl.textContent = `
+    .edge-line { stroke-linecap: round; stroke-opacity: 0.75; }
+    .edge-line.suspicious { stroke: #ef4444; stroke-dasharray: 4, 3; }
+    .node-circle { stroke-width: 2.2px; }
+    .node-label { font-family: 'JetBrains Mono', monospace, sans-serif; font-size: 10px; fill: #cbd5e1; text-anchor: middle; }
+    .cluster-halo { fill-opacity: 0.05; }
+  `;
+  clonedSvg.insertBefore(styleEl, clonedSvg.firstChild);
+
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(clonedSvg);
+  const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(svgBlob);
+
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const dpr = 2; // high-resolution 2x capture
+      const canvas = document.createElement('canvas');
+      canvas.width = width * dpr;
+      canvas.height = totalHeight * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+
+      // 1. Dark tactical background
+      ctx.fillStyle = '#080c14';
+      ctx.fillRect(0, 0, width, height);
+
+      // Grid watermark pattern
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.02)';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < width; x += 32) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
+      }
+      for (let y = 0; y < height; y += 32) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+      }
+
+      // 2. Draw SVG Graph
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // 3. Top Forensic Classification Badge
+      ctx.fillStyle = 'rgba(10, 15, 26, 0.85)';
+      ctx.fillRect(14, 14, 330, 24);
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+      ctx.strokeRect(14, 14, 330, 24);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 10px "JetBrains Mono", monospace';
+      ctx.fillText('CRIMENET FORENSIC EVIDENCE · CASE REF: SIH-26189', 22, 30);
+
+      // 4. Bottom Footer strip
+      ctx.fillStyle = '#0b1120';
+      ctx.fillRect(0, height, width, footerHeight);
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+      ctx.fillRect(0, height, width, 1);
+
+      ctx.font = '10px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#94a3b8';
+      const timestamp = new Date().toLocaleString('en-US', { hour12: false });
+      ctx.fillText(`CLASSIFIED LAW ENFORCEMENT EXHIBIT · GENERATED: ${timestamp}`, 16, height + 22);
+
+      const statsText = `ENTITIES: ${graphData.stats.total_persons}  |  LINKS: ${graphData.stats.total_edges}  |  SYNDICATES: ${graphData.stats.total_clusters}`;
+      const statsMetrics = ctx.measureText(statsText);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillText(statsText, width - statsMetrics.width - 16, height + 22);
+
+      canvas.toBlob(blob => {
+        hideLoading();
+        URL.revokeObjectURL(url);
+        if (!blob) {
+          showBanner('Failed to generate image blob.', 'danger');
+          return;
+        }
+        const dlUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.download = `crimenet_evidence_${Date.now()}.png`;
+        a.href = dlUrl;
+        a.click();
+        URL.revokeObjectURL(dlUrl);
+        showBanner('Forensic evidence snapshot exported (PNG).', 'success');
+      }, 'image/png');
+    } catch (err) {
+      hideLoading();
+      URL.revokeObjectURL(url);
+      showBanner(`Image export failed: ${err.message}`, 'danger');
+    }
+  };
+
+  img.onerror = () => {
+    hideLoading();
+    URL.revokeObjectURL(url);
+    showBanner('Failed to render SVG to image format.', 'danger');
+  };
+
+  img.src = url;
+}
+
 // ── Workspace Reset & Multi-Source Triggers ────────────────────────────────────
 function initButtons() {
   $('btn-reset').addEventListener('click', () => {
