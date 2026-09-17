@@ -15,9 +15,13 @@ Endpoints:
 """
 
 import os
+import sys
 import json
 import glob
 import traceback
+
+# Ensure backend/ modules (graph_engine, ai_engine) are importable on Vercel
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
