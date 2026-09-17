@@ -29,15 +29,24 @@ MODELS = [
 
 _client = None
 
-def _get_client():
+def _init_groq():
     global _client
     if Groq is None:
         return None
-    if _client is None:
-        try:
-            _client = Groq(api_key=GROQ_API_KEY)
-        except Exception:
-            _client = None
+    try:
+        _client = Groq(api_key=GROQ_API_KEY)
+        # Touch chat completions resource to warm up dynamic imports
+        _ = getattr(_client, 'chat', None)
+    except Exception:
+        _client = None
+    return _client
+
+_init_groq()
+
+def _get_client():
+    global _client
+    if _client is None and Groq is not None:
+        return _init_groq()
     return _client
 
 
