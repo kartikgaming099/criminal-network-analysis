@@ -36,9 +36,9 @@ from ai_engine import (
 app = Flask(__name__)
 CORS(app, origins="*")
 
-# Folder where the mock CSVs live (parent of this file)
+# Folder where the mock CSVs live
 BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR   = BASE_DIR   # CSVs are in the sih/ root
+DATA_DIR   = os.path.join(BASE_DIR, 'mock_data')
 
 MOCK_DATASETS = {
     'call_records':               'Call_Records.csv',
