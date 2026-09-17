@@ -153,7 +153,8 @@ def parse_bank_transactions(df: pd.DataFrame, G: nx.Graph, persons: dict,
         _add_edge(G, a, b, 'financial transaction', description,
                   weight=info['total'], suspicious=suspicious,
                   extra={'txn_count': info['count'], 'total_amount': info['total'],
-                         'modes': list(info['modes']), 'date_range': [first_date, last_date]})
+                         'modes': list(info['modes']), 'date_range': [first_date, last_date],
+                         'dates': dates_sorted, 'date': first_date})
 
 
 def parse_vehicle_registrations(df: pd.DataFrame, G: nx.Graph, persons: dict):
@@ -202,7 +203,10 @@ def parse_vehicle_transfers(df: pd.DataFrame, G: nx.Graph, persons: dict):
         suspicious = 'illegal' in ttype.lower() or 'chop' in note.lower()
         _add_edge(G, from_name, to_name, 'vehicle transfer',
                   f"Vehicle {reg} on {date}. {note}",
-                  suspicious=suspicious)
+                  suspicious=suspicious,
+                  extra={'date': date if date and date != 'nan' else None,
+                         'date_range': [date, date] if date and date != 'nan' else None,
+                         'dates': [date] if date and date != 'nan' else []})
 
 
 def parse_generic(df: pd.DataFrame, G: nx.Graph, persons: dict):
@@ -496,6 +500,8 @@ def _finalise(G: nx.Graph, persons: dict, schema: str) -> dict:
             'txn_count':        data.get('txn_count', None),
             'total_amount':     data.get('total_amount', None),
             'date_range':       data.get('date_range', None),
+            'dates':            data.get('dates', []),
+            'date':             data.get('date', None),
         })
 
     # ── Edge reduction — keep only meaningful edges to reduce visual clutter ───

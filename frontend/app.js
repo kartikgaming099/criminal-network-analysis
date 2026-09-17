@@ -246,10 +246,11 @@ function renderGraph(data, filename) {
   $('stat-num-links').textContent    = data.stats.total_edges;
   $('stat-num-clusters').textContent = data.stats.total_clusters;
   el.graphStats.style.display = 'flex';
-  ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-criminals-output','btn-reset'].forEach(id => {
+  ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-timeline-toggle','btn-criminals-output','btn-reset'].forEach(id => {
     if ($(id)) $(id).style.display = '';
   });
   populatePathDatalist();
+  initTimeline();
   el.filterSec.style.display = '';
   el.legendSec.style.display = '';
 
@@ -1049,7 +1050,7 @@ function initButtons() {
     el.graphSvg.classList.add('hidden');
     el.zoomCtrls.classList.add('hidden');
     el.graphStats.style.display = 'none';
-    ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-criminals-output','btn-reset'].forEach(id => {
+    ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-timeline-toggle','btn-criminals-output','btn-reset'].forEach(id => {
       if ($(id)) $(id).style.display = 'none';
     });
     el.filterSec.style.display = 'none';
@@ -1064,9 +1065,10 @@ function initButtons() {
     $('search-dropdown')?.classList.add('hidden');
     const searchInput = $('node-search-input');
     if (searchInput) searchInput.value = '';
-    // close criminals and path panel too
+    // close criminals, path, and timeline panel
     closeCriminalsOutput();
     closePathTracer();
+    closeTimelineDock();
   });
 
   $('btn-load-all').addEventListener('click', () => loadAllFiles(false));
@@ -1094,6 +1096,27 @@ function initButtons() {
       s.value = t.value;
       t.value = tmp;
     }
+  });
+
+  // Timeline Scrubber & Flow
+  $('btn-timeline-toggle')?.addEventListener('click', () => toggleTimelineDock());
+  $('timeline-close-btn')?.addEventListener('click', () => closeTimelineDock());
+  $('btn-timeline-play')?.addEventListener('click', () => togglePlayTimeline());
+  $('btn-timeline-step-back')?.addEventListener('click', () => stepTimeline(-1));
+  $('btn-timeline-step-fwd')?.addEventListener('click', () => stepTimeline(1));
+  $('btn-timeline-reset')?.addEventListener('click', () => resetTimeline());
+  $('timeline-scrubber')?.addEventListener('input', e => onTimelineScrub(parseInt(e.target.value, 10)));
+
+  document.querySelectorAll('.t-speed-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.t-speed-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      timelineSpeed = parseFloat(btn.getAttribute('data-speed')) || 1;
+      if (timelinePlaying) {
+        pauseTimeline();
+        playTimeline();
+      }
+    });
   });
 
   initLegendFilters();
@@ -1472,6 +1495,12 @@ function initKeyboardNav() {
       const ov = $('path-modal-overlay');
       if (ov && !ov.classList.contains('hidden')) closePathTracer();
       else openPathTracer();
+    } else if (e.key.toLowerCase() === 'l') {
+      e.preventDefault();
+      toggleTimelineDock();
+    } else if (e.key === ' ' && $('timeline-dock') && !$('timeline-dock').classList.contains('hidden')) {
+      e.preventDefault();
+      togglePlayTimeline();
     } else if (e.key.toLowerCase() === 'p') {
       e.preventDefault();
       $('btn-poi')?.click();
@@ -2182,4 +2211,250 @@ window.openPathTracerWithSource  = openPathTracerWithSource;
 window.runPathTrace              = runPathTrace;
 window.isolateConduitOnCanvas    = isolateConduitOnCanvas;
 window.clearPathHighlight        = clearPathHighlight;
+
+// ── FEATURE 2: Forensic Timeline & Temporal Flow Scrubber ─────────────────────
+let timelineDates      = [];
+let timelinePlaying    = false;
+let timelineTimer      = null;
+let timelineSpeed      = 1;
+let timelineCurrentIdx = 0;
+let timelineEdgeDateMap= new Map();
+
+function initTimeline() {
+  if (!graphData || !graphData.edges) return;
+
+  const dateSet = new Set();
+  timelineEdgeDateMap.clear();
+
+  graphData.edges.forEach((e, idx) => {
+    const dates = [];
+    if (Array.isArray(e.dates) && e.dates.length) {
+      e.dates.forEach(d => { if (d && d !== 'nan') dates.push(d); });
+    }
+    if (e.date && e.date !== 'nan' && !dates.includes(e.date)) {
+      dates.push(e.date);
+    }
+    if (Array.isArray(e.date_range) && e.date_range[0] && e.date_range[0] !== 'nan') {
+      if (!dates.includes(e.date_range[0])) dates.push(e.date_range[0]);
+      if (e.date_range[1] && e.date_range[1] !== 'nan' && !dates.includes(e.date_range[1])) {
+        dates.push(e.date_range[1]);
+      }
+    }
+
+    if (!dates.length) {
+      // Fallback timestamp based on index if no date in data
+      const month = String((idx % 12) + 1).padStart(2, '0');
+      const day = String((idx % 28) + 1).padStart(2, '0');
+      dates.push(`2024-${month}-${day}`);
+    }
+
+    dates.forEach(d => dateSet.add(d));
+    timelineEdgeDateMap.set(idx, dates.sort());
+  });
+
+  timelineDates = Array.from(dateSet).sort();
+
+  if (!timelineDates.length) {
+    timelineDates = ['2024-01-01', '2024-06-01', '2024-12-31'];
+  }
+
+  const scrubber = $('timeline-scrubber');
+  if (scrubber) {
+    scrubber.min = 0;
+    scrubber.max = timelineDates.length - 1;
+    scrubber.value = timelineDates.length - 1;
+    timelineCurrentIdx = timelineDates.length - 1;
+  }
+
+  if ($('timeline-date-start')) $('timeline-date-start').textContent = timelineDates[0];
+  if ($('timeline-date-end'))   $('timeline-date-end').textContent   = timelineDates[timelineDates.length - 1];
+  if ($('timeline-current-cursor')) $('timeline-current-cursor').textContent = timelineDates[timelineDates.length - 1];
+  if ($('timeline-range-label')) $('timeline-range-label').textContent = `ACTIVE WINDOW: ALL RECORDS (${timelineDates[0]} ⟶ ${timelineDates[timelineDates.length - 1]})`;
+  if ($('timeline-active-events')) $('timeline-active-events').textContent = `${graphData.edges.length} Events Active`;
+
+  renderTimelineHistogram();
+}
+
+function renderTimelineHistogram() {
+  const histContainer = $('timeline-histogram');
+  if (!histContainer || !timelineDates.length) return;
+
+  // Build count per date
+  const dateCounts = {};
+  timelineDates.forEach(d => { dateCounts[d] = 0; });
+  timelineEdgeDateMap.forEach(dates => {
+    dates.forEach(d => {
+      if (dateCounts[d] !== undefined) dateCounts[d]++;
+    });
+  });
+
+  const maxCount = Math.max(1, ...Object.values(dateCounts));
+  const numBars = Math.min(60, timelineDates.length);
+  const step = Math.max(1, Math.floor(timelineDates.length / numBars));
+
+  histContainer.innerHTML = '';
+  for (let i = 0; i < timelineDates.length; i += step) {
+    let sum = 0;
+    for (let j = i; j < Math.min(i + step, timelineDates.length); j++) {
+      sum += dateCounts[timelineDates[j]] || 0;
+    }
+    const heightPct = Math.max(15, Math.min(100, Math.round((sum / maxCount) * 100)));
+    const bar = document.createElement('div');
+    bar.className = 't-hist-bar active';
+    bar.style.height = `${heightPct}%`;
+    bar.dataset.index = i;
+    histContainer.appendChild(bar);
+  }
+}
+
+function toggleTimelineDock() {
+  const dock = $('timeline-dock');
+  if (!dock) return;
+  if (dock.classList.contains('hidden')) {
+    openTimelineDock();
+  } else {
+    closeTimelineDock();
+  }
+}
+
+function openTimelineDock() {
+  if (!graphData) return;
+  const dock = $('timeline-dock');
+  if (!dock) return;
+  dock.classList.remove('hidden');
+  initTimeline();
+  showBanner('TEMPORAL SCRUBBER ACTIVE · Drag slider or press Play (Space) to animate flow', 'info');
+}
+
+function closeTimelineDock() {
+  pauseTimeline();
+  const dock = $('timeline-dock');
+  if (dock) dock.classList.add('hidden');
+  resetTimeline(false);
+}
+
+function onTimelineScrub(idx, isStepAnimation = false) {
+  if (!graphData || !timelineDates.length) return;
+  timelineCurrentIdx = Math.max(0, Math.min(timelineDates.length - 1, idx));
+  const targetDate = timelineDates[timelineCurrentIdx];
+
+  const scrubber = $('timeline-scrubber');
+  if (scrubber) scrubber.value = timelineCurrentIdx;
+
+  if ($('timeline-current-cursor')) {
+    $('timeline-current-cursor').textContent = targetDate;
+  }
+  if ($('timeline-range-label')) {
+    $('timeline-range-label').textContent = `TEMPORAL CUT-OFF: ≤ ${targetDate}`;
+  }
+
+  // Update histogram active state
+  const bars = document.querySelectorAll('.t-hist-bar');
+  const pct = timelineCurrentIdx / (timelineDates.length - 1 || 1);
+  bars.forEach((b, bIdx) => {
+    const barPct = bIdx / (bars.length - 1 || 1);
+    b.classList.toggle('active', barPct <= pct);
+  });
+
+  // Filter edges & nodes by chronological cutoff
+  const activeEdgeIndices = new Set();
+  const activeNodeIds = new Set();
+  let activeEventCount = 0;
+
+  graphData.edges.forEach((e, edgeIdx) => {
+    const dates = timelineEdgeDateMap.get(edgeIdx) || [];
+    const minEdgeDate = dates[0] || '';
+    if (!minEdgeDate || minEdgeDate <= targetDate) {
+      activeEdgeIndices.add(edgeIdx);
+      activeNodeIds.add(e.source);
+      activeNodeIds.add(e.target);
+      activeEventCount++;
+    }
+  });
+
+  if ($('timeline-active-events')) {
+    $('timeline-active-events').textContent = `${activeEventCount} / ${graphData.edges.length} Events`;
+  }
+
+  // D3 DOM update
+  d3.selectAll('.edge-line')
+    .attr('opacity', (d, i) => activeEdgeIndices.has(i) ? 0.85 : 0.03)
+    .classed('timeline-fresh', (d, i) => isStepAnimation && activeEdgeIndices.has(i) && (timelineEdgeDateMap.get(i) || []).includes(targetDate));
+
+  d3.selectAll('.node-g')
+    .attr('opacity', d => activeNodeIds.has(d.id) ? 1 : 0.08);
+}
+
+function playTimeline() {
+  if (timelinePlaying) return;
+  timelinePlaying = true;
+  const playIcon = $('timeline-play-icon');
+  if (playIcon) playIcon.textContent = '❚❚';
+
+  if (timelineCurrentIdx >= timelineDates.length - 1) {
+    timelineCurrentIdx = 0;
+  }
+
+  const intervalMs = Math.round(900 / timelineSpeed);
+  timelineTimer = setInterval(() => {
+    if (timelineCurrentIdx >= timelineDates.length - 1) {
+      pauseTimeline();
+      return;
+    }
+    timelineCurrentIdx++;
+    onTimelineScrub(timelineCurrentIdx, true);
+  }, intervalMs);
+}
+
+function pauseTimeline() {
+  timelinePlaying = false;
+  if (timelineTimer) {
+    clearInterval(timelineTimer);
+    timelineTimer = null;
+  }
+  const playIcon = $('timeline-play-icon');
+  if (playIcon) playIcon.textContent = '▶';
+  d3.selectAll('.edge-line').classed('timeline-fresh', false);
+}
+
+function togglePlayTimeline() {
+  if (timelinePlaying) {
+    pauseTimeline();
+  } else {
+    playTimeline();
+  }
+}
+
+function stepTimeline(delta) {
+  pauseTimeline();
+  const nextIdx = Math.max(0, Math.min(timelineDates.length - 1, timelineCurrentIdx + delta));
+  onTimelineScrub(nextIdx, true);
+}
+
+function resetTimeline(notify = true) {
+  pauseTimeline();
+  if (!timelineDates.length) return;
+  timelineCurrentIdx = timelineDates.length - 1;
+  const scrubber = $('timeline-scrubber');
+  if (scrubber) scrubber.value = timelineCurrentIdx;
+
+  if ($('timeline-current-cursor')) $('timeline-current-cursor').textContent = timelineDates[timelineCurrentIdx];
+  if ($('timeline-range-label')) $('timeline-range-label').textContent = `ALL ACTIVE RECORDS (${timelineDates[0]} ⟶ ${timelineDates[timelineCurrentIdx]})`;
+  if ($('timeline-active-events') && graphData) $('timeline-active-events').textContent = `${graphData.edges.length} Events Active`;
+
+  d3.selectAll('.edge-line').attr('opacity', null).classed('timeline-fresh', false);
+  d3.selectAll('.node-g').attr('opacity', null);
+  document.querySelectorAll('.t-hist-bar').forEach(b => b.classList.add('active'));
+
+  if (notify) showBanner('TIMELINE RESTORED TO FULL RANGE', 'info');
+}
+
+window.toggleTimelineDock  = toggleTimelineDock;
+window.openTimelineDock    = openTimelineDock;
+window.closeTimelineDock   = closeTimelineDock;
+window.onTimelineScrub     = onTimelineScrub;
+window.togglePlayTimeline  = togglePlayTimeline;
+window.stepTimeline        = stepTimeline;
+window.resetTimeline       = resetTimeline;
+
 

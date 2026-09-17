@@ -106,6 +106,14 @@
         <span>Path Tracer</span>
       </button>
 
+      <button class="btn btn-ghost" id="btn-timeline-toggle" style="display:none;" title="Toggle Temporal Evidence Flow Timeline (L)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>Timeline Flow</span>
+      </button>
+
       <button class="btn btn-criminals" id="btn-criminals-output" style="display:none;" title="View Criminals-Only Network Output">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -307,6 +315,49 @@
           </svg>
         </button>
       </div>
+
+      <!-- Floating Forensic Timeline Dock -->
+      <div class="timeline-dock hidden" id="timeline-dock">
+        <div class="timeline-header">
+          <div class="timeline-header-left">
+            <div class="timeline-pulse-dot"></div>
+            <div>
+              <div class="timeline-title">TEMPORAL EVIDENCE FLOW &amp; ACTIVITY TIMELINE</div>
+              <div class="timeline-sub" id="timeline-range-label">ALL ACTIVE RECORDS</div>
+            </div>
+          </div>
+          <div class="timeline-metrics">
+            <span class="timeline-metric-pill" id="timeline-active-events">0 Events</span>
+            <button class="timeline-close-btn" id="timeline-close-btn" title="Close Timeline Dock">✕</button>
+          </div>
+        </div>
+        <div class="timeline-controls-row">
+          <div class="timeline-playback-btns">
+            <button class="t-btn" id="btn-timeline-step-back" title="Step Back (Previous Event)">⏮</button>
+            <button class="t-btn primary" id="btn-timeline-play" title="Play / Pause Temporal Progression (Space)">
+              <span id="timeline-play-icon">▶</span>
+            </button>
+            <button class="t-btn" id="btn-timeline-step-fwd" title="Step Forward (Next Event)">⏭</button>
+            <button class="t-btn" id="btn-timeline-reset" title="Show All Events (Full Range)">↺ Full</button>
+            <div class="timeline-speed-selector">
+              <span class="t-speed-lbl">SPEED:</span>
+              <button class="t-speed-btn active" data-speed="1">1x</button>
+              <button class="t-speed-btn" data-speed="2">2x</button>
+              <button class="t-speed-btn" data-speed="4">4x</button>
+            </div>
+          </div>
+          <div class="timeline-slider-wrap">
+            <div class="timeline-histogram" id="timeline-histogram"></div>
+            <input type="range" class="timeline-scrubber" id="timeline-scrubber" min="0" max="100" value="100" />
+            <div class="timeline-labels">
+              <span id="timeline-date-start" class="t-date-lbl">--</span>
+              <span id="timeline-current-cursor" class="timeline-cursor-badge">--</span>
+              <span id="timeline-date-end" class="t-date-lbl">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- RIGHT DETAIL PANEL: Subject Dossier & Connection Inspector -->
@@ -434,6 +485,10 @@
           <div class="shortcut-item">
             <div class="shortcut-desc">Toggle Intermediary Path Tracer</div>
             <div class="shortcut-keys"><kbd class="kbd-key">T</kbd></div>
+          </div>
+          <div class="shortcut-item">
+            <div class="shortcut-desc">Toggle Temporal Evidence Timeline</div>
+            <div class="shortcut-keys"><kbd class="kbd-key">L</kbd></div>
           </div>
           <div class="shortcut-item">
             <div class="shortcut-desc">Synthesize Case Briefing Dossier</div>
