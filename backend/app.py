@@ -25,7 +25,7 @@ import pandas as pd
 # Ensure backend/ modules (graph_engine, ai_engine) are importable on Vercel
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 
 from graph_engine import build_graph_from_csv, build_combined_graph
@@ -42,9 +42,10 @@ from ai_engine import (
 app = Flask(__name__)
 CORS(app, origins="*")
 
-# Folder where the mock CSVs live
-BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR   = os.path.join(BASE_DIR, 'mock_data')
+# Folder paths
+BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR     = os.path.join(BASE_DIR, 'mock_data')
+FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
 
 MOCK_DATASETS = {
     'call_records':               'Call_Records.csv',
@@ -53,6 +54,19 @@ MOCK_DATASETS = {
     'vehicle_registrations':      'delhi_vehicle_registrations.csv',
     'vehicle_ownership_transfers':'delhi_vehicle_ownership_transfers.csv',
 }
+
+@app.route('/')
+def serve_index():
+    return send_from_directory(FRONTEND_DIR, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    # Only serve static if path does not start with api/
+    if path.startswith('api/'):
+        return _error('Not found', 404)
+    if os.path.exists(os.path.join(FRONTEND_DIR, path)):
+        return send_from_directory(FRONTEND_DIR, path)
+    return send_from_directory(FRONTEND_DIR, 'index.html')
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
