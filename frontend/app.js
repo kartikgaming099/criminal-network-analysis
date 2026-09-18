@@ -93,7 +93,9 @@ function initUpload() {
 }
 
 async function uploadFile(file) {
-  showLoading(`Ingesting ${file.name}…`);
+  const fnEl = $('upload-filename');
+  if (fnEl) { $('upload-filename-text').textContent = file.name; fnEl.classList.add('visible'); }
+  showLoading(`Parsing ${file.name}…`);
   const form = new FormData();
   form.append('file', file);
   form.append('amount_threshold', 0);
@@ -196,41 +198,35 @@ function handleGraphResponse(graph, filename) {
 }
 
 // ── Operational Banner ─────────────────────────────────────────────────────────
+let _bannerTimer = null;
 function showBanner(text, type = 'info') {
   el.infoBannerTxt.textContent = text;
-  el.infoBanner.classList.remove('hidden');
-  el.infoBanner.style.borderColor = type === 'danger' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(59, 130, 246, 0.35)';
+  el.infoBanner.classList.remove('hidden', 'toast-out', 'toast-info', 'toast-danger', 'toast-warning', 'toast-success');
+  el.infoBanner.classList.add('toast-' + (type === 'danger' ? 'danger' : type));
+  clearTimeout(_bannerTimer);
+  _bannerTimer = setTimeout(hideBanner, 4000);
 }
 function hideBanner() {
-  el.infoBanner.classList.add('hidden');
+  el.infoBanner.classList.add('toast-out');
+  setTimeout(() => el.infoBanner.classList.add('hidden'), 250);
 }
 
 // ── Taxonomy Palette ───────────────────────────────────────────────────────────
+// ── Colour helpers (indigo/purple palette) ──────────────────────────────────────
 const EDGE_COLORS = {
-  'phone call':            '#38bdf8',
-  'shared bank account':   '#eab308',
-  'financial transaction': '#10b981',
-  'vehicle transfer':      '#f97316',
-  'same criminal cluster': '#8b5cf6',
-  'connected':             '#64748b',
+  'phone call':            '#34d399',
+  'shared bank account':   '#fde68a',
+  'financial transaction': '#fbbf24',
+  'vehicle transfer':      '#a78bfa',
+  'same criminal cluster': '#38bdf8',
+  'connected':             '#6366f1',
 };
-
 function edgeStroke(type, suspicious) {
-  if (suspicious) return '#ef4444';
-  return EDGE_COLORS[type] || '#64748b';
+  if (suspicious) return '#f87171';
+  return EDGE_COLORS[type] || '#6366f1';
 }
-
-function nodeFill(node) {
-  return node.is_criminal
-    ? (node.has_stolen_vehicle ? '#450a0a' : '#581c87' === '#581c87' ? '#7f1d1d' : '#7f1d1d')
-    : '#0c2444';
-}
-
-function nodeStroke(node) {
-  return node.is_criminal
-    ? (node.has_stolen_vehicle ? '#f97316' : '#ef4444')
-    : '#38bdf8';
-}
+function nodeFill(node)   { return node.is_criminal ? (node.has_stolen_vehicle ? '#3a2a55' : '#3a1f2e') : '#1e2a4a'; }
+function nodeStroke(node) { return node.is_criminal ? (node.has_stolen_vehicle ? '#a78bfa' : '#f87171') : '#60a5fa'; }
 
 function nodeR(node) {
   return 13 + Math.min(10, Math.sqrt(node.degree || 0) * 2.8);
@@ -365,13 +361,14 @@ function renderGraph(data, filename) {
     .on('click', (ev, d) => { ev.stopPropagation(); onNodeClick(d, edges, nodeMap); });
 
   // Tactical Surveillance Indicator for Known Criminals / POIs
+    // Glow ring for criminals
   nodeSel.filter(d => d.is_criminal)
     .append('circle')
-    .attr('r', d => nodeR(d) + 6)
+    .attr('class', 'node-glow-ring')
+    .attr('r', d => nodeR(d) + 7)
     .attr('fill', 'none')
     .attr('stroke', d => nodeStroke(d))
     .attr('stroke-width', 1.2)
-    .attr('stroke-dasharray', '3, 2')
     .attr('opacity', 0.5)
     .attr('pointer-events', 'none');
 
