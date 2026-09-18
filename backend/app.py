@@ -156,55 +156,99 @@ def load_demo():
         return _error(str(e), 500)
 
 
+def _file_to_csv_text(f):
+    filename = f.filename or 'upload.csv'
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    SUPPORTED = {'csv', 'json', 'xls', 'xlsx', 'txt'}
+    if ext not in SUPPORTED:
+        raise ValueError(f"Unsupported file type '.{ext}'. Supported: CSV, JSON, XLS, XLSX, TXT.")
+    raw_bytes = f.read()
+    if ext in ('xls', 'xlsx'):
+        df = pd.read_excel(io.BytesIO(raw_bytes))
+        return df.to_csv(index=False), filename
+    elif ext == 'json':
+        try:
+            df = pd.read_json(io.BytesIO(raw_bytes))
+        except Exception:
+            parsed = json.loads(raw_bytes.decode('utf-8', errors='replace'))
+            if isinstance(parsed, dict):
+                list_vals = [v for v in parsed.values() if isinstance(v, list)]
+                df = pd.DataFrame(list_vals[0]) if list_vals else pd.DataFrame([parsed])
+            elif isinstance(parsed, list):
+                df = pd.DataFrame(parsed)
+            else:
+                df = pd.DataFrame()
+        return df.to_csv(index=False), filename
+    elif ext == 'txt':
+        raw_str = raw_bytes.decode('utf-8', errors='replace')
+        try:
+            df = pd.read_csv(io.StringIO(raw_str), sep=None, engine='python')
+            return df.to_csv(index=False), filename
+        except Exception:
+            return raw_str, filename
+    else:
+        return raw_bytes.decode('utf-8', errors='replace'), filename
+
+
 @app.route('/api/upload', methods=['POST'])
 def upload_csv():
     """
-    Accept a file upload and return the graph.
+    Accept a single file upload and return the graph.
     Supports CSV, JSON, XLS, XLSX, TXT.
     Multipart form: file=<file>, amount_threshold=<float> (optional)
     """
     if 'file' not in request.files:
         return _error("No file provided. Send field name 'file'.")
 
-    f          = request.files['file']
-    threshold  = float(request.form.get('amount_threshold', 0))
-    filename   = f.filename or 'upload.csv'
-    ext        = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-
-    SUPPORTED = {'csv', 'json', 'xls', 'xlsx', 'txt'}
-    if ext not in SUPPORTED:
-        return _error(f"Unsupported file type '.{ext}'. Supported: CSV, JSON, XLS, XLSX, TXT. Convert data to CSV for best results.")
+    f         = request.files['file']
+    threshold = float(request.form.get('amount_threshold', 0))
 
     try:
-        raw_bytes = f.read()
-        if ext in ('xls', 'xlsx'):
-            df = pd.read_excel(io.BytesIO(raw_bytes))
-            csv_text = df.to_csv(index=False)
-        elif ext == 'json':
-            try:
-                df = pd.read_json(io.BytesIO(raw_bytes))
-            except Exception:
-                parsed = json.loads(raw_bytes.decode('utf-8', errors='replace'))
-                if isinstance(parsed, dict):
-                    list_vals = [v for v in parsed.values() if isinstance(v, list)]
-                    df = pd.DataFrame(list_vals[0]) if list_vals else pd.DataFrame([parsed])
-                elif isinstance(parsed, list):
-                    df = pd.DataFrame(parsed)
-                else:
-                    df = pd.DataFrame()
-            csv_text = df.to_csv(index=False)
-        elif ext == 'txt':
-            raw_str = raw_bytes.decode('utf-8', errors='replace')
-            try:
-                df = pd.read_csv(io.StringIO(raw_str), sep=None, engine='python')
-                csv_text = df.to_csv(index=False)
-            except Exception:
-                csv_text = raw_str
-        else:
-            csv_text = raw_bytes.decode('utf-8', errors='replace')
-
+        csv_text, filename = _file_to_csv_text(f)
         graph = build_graph_from_csv(csv_text, filename, threshold)
         return _ok({'graph': graph, 'filename': filename})
+    except Exception as e:
+        traceback.print_exc()
+        return _error(str(e), 500)
+
+
+@app.route('/api/upload-multi', methods=['POST'])
+def upload_multi():
+    """
+    Accept multiple file uploads and return the combined correlated graph.
+    Supports CSV, JSON, XLS, XLSX, TXT.
+    Multipart form: files=<file1>, files=<file2>..., amount_threshold=<float>, suspected_only=<bool>
+    """
+    files = request.files.getlist('files') or request.files.getlist('file')
+    if not files:
+        return _error("No files provided. Send form field 'files'.")
+
+    threshold      = float(request.form.get('amount_threshold', 0))
+    suspected_only = request.form.get('suspected_only', 'false').lower() in ('true', '1', 'yes')
+
+    file_dict = {}
+    filenames = []
+    errors = []
+
+    for f in files:
+        try:
+            csv_text, fname = _file_to_csv_text(f)
+            file_dict[fname] = csv_text
+            filenames.append(fname)
+        except Exception as err:
+            errors.append(f"{f.filename}: {err}")
+
+    if not file_dict:
+        return _error("No valid files could be processed: " + "; ".join(errors), 400)
+
+    try:
+        graph = build_combined_graph(file_dict, threshold, suspected_only)
+        return _ok({
+            'graph': graph,
+            'filename': ', '.join(filenames) if len(filenames) <= 2 else f"{len(filenames)} Repositories Correlated",
+            'files_processed': filenames,
+            'errors': errors,
+        })
     except Exception as e:
         traceback.print_exc()
         return _error(str(e), 500)

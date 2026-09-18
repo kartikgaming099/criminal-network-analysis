@@ -18,6 +18,12 @@ let gRootSel          = null;
 let activeNodeMap     = null;
 let activeEdges       = null;
 
+// Track whether current data came from user upload (vs. demo datasets)
+let uploadedDataSource = null;  // { filename, graph } or null
+let uploadedFiles      = [];    // [{id, file, name, sizeKb, graph, status: 'staged'|'analyzed'}]
+let activeFileId       = null;  // null | '__all__' | specific file id
+let correlatedGraph    = null;  // cached multi-file correlation graph
+
 // ── DOM Elements ───────────────────────────────────────────────────────────────
 const $  = id => document.getElementById(id);
 const el = {
@@ -67,21 +73,194 @@ function hideLoading() {
 const ALLOWED_EXTS = ['.csv', '.json', '.xls', '.xlsx', '.txt'];
 
 function initUpload() {
-  const zone  = $('upload-zone');
-  const input = $('file-input');
-  zone.addEventListener('click', () => input.click());
-  input.addEventListener('change', e => { if (e.target.files[0]) uploadFile(e.target.files[0]); });
-  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('dragover');
-    const f = e.dataTransfer.files[0];
-    if (f && ALLOWED_EXTS.some(ext => f.name.toLowerCase().endsWith(ext))) uploadFile(f);
-    else showBanner('Unsupported file type. Please use CSV, JSON, XLS, XLSX, or TXT.', 'danger');
+  const zone       = $('upload-zone');
+  const input      = $('file-input');
+  const queueEl    = $('file-queue');
+  const btnAnalyse = $('btn-analyse-files');
+
+  // ── Render the uploaded files list in sidebar ──
+  function renderUploadedFiles() {
+    if (!uploadedFiles.length) {
+      if (queueEl) queueEl.innerHTML = '';
+      if (btnAnalyse) btnAnalyse.style.display = 'none';
+      return;
+    }
+    if (btnAnalyse) {
+      btnAnalyse.style.display = 'flex';
+      const stagedCount = uploadedFiles.filter(f => f.status === 'staged').length;
+      const textEl = $('btn-analyse-text') || btnAnalyse.querySelector('span');
+      if (textEl) {
+        textEl.textContent = stagedCount > 0
+          ? (uploadedFiles.length === 1 ? 'Analyse File' : `Analyse ${uploadedFiles.length} Files`)
+          : `Re-analyse (${uploadedFiles.length})`;
+      }
+    }
+
+    if (queueEl) {
+      queueEl.innerHTML = uploadedFiles.map(f => {
+        const isActive = activeFileId === f.id;
+        const isAnalyzed = f.status === 'analyzed' && f.graph;
+        const nodeCount = isAnalyzed ? (f.graph.nodes?.length || 0) : 0;
+        const edgeCount = isAnalyzed ? (f.graph.edges?.length || 0) : 0;
+        const meta = isAnalyzed
+          ? `${nodeCount} entities · ${edgeCount} links · ${f.sizeKb} KB`
+          : `${f.sizeKb} KB · Ready to analyse`;
+        const badge = isAnalyzed
+          ? `<span class="uploaded-file-badge" style="color:#10b981;background:rgba(16,185,129,0.15);padding:1px 6px;border-radius:2px;font-size:8.5px;font-family:var(--font-mono);font-weight:700;">READY</span>`
+          : `<span class="uploaded-file-badge" style="color:#eab308;background:rgba(234,179,8,0.15);padding:1px 6px;border-radius:2px;font-size:8.5px;font-family:var(--font-mono);font-weight:700;">STAGED</span>`;
+
+        return `
+          <div class="file-queue-item ${isActive ? 'active' : ''}" onclick="selectUploadedFile('${f.id}')" title="Click to view this file network on canvas">
+            <div class="file-queue-info">
+              <div class="file-queue-name">${escapeHtml(f.name)}</div>
+              <div class="file-queue-meta">${meta}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              ${badge}
+              <button class="file-queue-remove" title="Remove ${escapeHtml(f.name)}" onclick="event.stopPropagation(); removeUploadedFile('${f.id}')">&#x2715;</button>
+            </div>
+          </div>`;
+      }).join('');
+    }
+  }
+
+  window.renderUploadedFiles = renderUploadedFiles;
+
+  // ── Add files to queue — NEVER clears existing files ──
+  function addFilesToQueue(files) {
+    let added = 0;
+    Array.from(files).forEach(f => {
+      const ext = '.' + f.name.split('.').pop().toLowerCase();
+      if (!ALLOWED_EXTS.includes(ext)) {
+        showBanner(`Unsupported type: ${f.name} — use CSV, JSON, XLS, XLSX, TXT.`, 'danger');
+        return;
+      }
+      const existing = uploadedFiles.find(q => q.name === f.name);
+      if (!existing) {
+        uploadedFiles.push({
+          id: 'uf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+          file: f,
+          name: f.name,
+          sizeKb: (f.size / 1024).toFixed(1),
+          graph: null,
+          status: 'staged'
+        });
+        added++;
+      } else {
+        existing.file = f;
+        existing.status = 'staged';
+        existing.graph = null;
+        added++;
+      }
+    });
+    if (added) {
+      renderUploadedFiles();
+      updateSidebarState();
+      showBanner(
+        `${added} file${added > 1 ? 's' : ''} added to evidence list. Click \u201cAnalyse Files\u201d or \u201cCorrelate All Repositories\u201d.`,
+        'info'
+      );
+    }
+  }
+
+  window.removeUploadedFile = function(fileId) {
+    const idx = uploadedFiles.findIndex(f => f.id === fileId);
+    if (idx === -1) return;
+    const removedName = uploadedFiles[idx].name;
+    uploadedFiles.splice(idx, 1);
+
+    if (uploadedFiles.length === 0) {
+      uploadedDataSource = null;
+      activeFileId = null;
+      correlatedGraph = null;
+      graphData = null;
+      gRootSel?.selectAll('*').remove();
+      el.emptyState.classList.remove('hidden');
+      el.graphSvg.classList.add('hidden');
+      el.zoomCtrls.classList.add('hidden');
+      el.graphStats.style.display = 'none';
+      ['btn-poi','btn-summary','btn-anomalies','btn-path-tracer','btn-timeline-toggle','btn-vulnerability','btn-criminals-output','btn-reset'].forEach(id => {
+        if ($(id)) $(id).style.display = 'none';
+      });
+      el.filterSec.style.display = 'none';
+      el.legendSec.style.display = 'none';
+      hideBanner();
+      updateSidebarState();
+      renderUploadedFiles();
+      showBanner(`Removed ${removedName}. No evidence files remaining.`, 'info');
+      return;
+    }
+
+    renderUploadedFiles();
+    updateSidebarState();
+
+    if (activeFileId === fileId) {
+      const nextAnalyzed = uploadedFiles.find(f => f.status === 'analyzed' && f.graph);
+      if (nextAnalyzed) {
+        selectUploadedFile(nextAnalyzed.id);
+      } else {
+        analyseUploadedFiles();
+      }
+    } else if (activeFileId === '__all__') {
+      correlateUserFiles();
+    }
+    showBanner(`Removed ${removedName}.`, 'info');
+  };
+
+  window.selectUploadedFile = async function(fileId) {
+    const f = uploadedFiles.find(item => item.id === fileId);
+    if (!f) return;
+    if (f.status !== 'analyzed' || !f.graph) {
+      showLoading(`Ingesting & analysing ${f.name}…`);
+      try {
+        const graph = await uploadFile(f.file);
+        f.graph = graph;
+        f.status = 'analyzed';
+      } catch (err) {
+        hideLoading();
+        showBanner(`Analysis error on ${f.name}: ${err.message}`, 'danger');
+        return;
+      }
+      hideLoading();
+    }
+    activeFileId = f.id;
+    uploadedDataSource = { filename: f.name, graph: f.graph };
+    renderUploadedFiles();
+    updateSidebarState();
+    handleGraphResponse(f.graph, f.name);
+    showBanner(`Viewing evidence repository: ${f.name}`, 'info');
+  };
+
+  // ── Unified Drop Zone: click to open file picker ──
+  zone?.addEventListener('click', () => {
+    input?.click();
   });
 
-  // Show Prototype toggle
+  // ── Primary file input change ──
+  input?.addEventListener('change', e => {
+    if (e.target.files?.length) addFilesToQueue(e.target.files);
+    input.value = '';
+  });
+
+  // ── "Analyse Files" button ──
+  btnAnalyse?.addEventListener('click', () => analyseUploadedFiles());
+
+  // ── Drag & Drop Events ──
+  zone?.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone?.addEventListener('dragleave', ()  => zone.classList.remove('dragover'));
+  zone?.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const files = Array.from(e.dataTransfer.files).filter(f =>
+      ALLOWED_EXTS.some(ext => f.name.toLowerCase().endsWith(ext)));
+    if (!files.length) {
+      showBanner('Unsupported file type. Use CSV, JSON, XLS, XLSX, or TXT.', 'danger');
+      return;
+    }
+    addFilesToQueue(files);
+  });
+
+  // ── Prototype toggle ──
   $('btn-show-prototype')?.addEventListener('click', () => {
     const list = $('dataset-list');
     const btn  = $('btn-show-prototype');
@@ -92,27 +271,239 @@ function initUpload() {
   });
 }
 
+// ── Sidebar State — show/hide prototype section based on user data presence ──
+function updateSidebarState() {
+  const protoSection = $('prototype-section');
+  if (!protoSection) return;
+  const hasUserData = uploadedFiles.length > 0 || uploadedDataSource !== null;
+  protoSection.style.display = hasUserData ? 'none' : '';
+}
+
+// ── Low-level single-file upload (returns graph or throws) ──
 async function uploadFile(file) {
-  const fnEl = $('upload-filename');
-  if (fnEl) { $('upload-filename-text').textContent = file.name; fnEl.classList.add('visible'); }
-  showLoading(`Parsing ${file.name}…`);
   const form = new FormData();
   form.append('file', file);
   form.append('amount_threshold', 0);
-  try {
-    const res  = await fetch(`${API}/upload`, { method: 'POST', body: form });
-    const json = await res.json();
-    if (json.error) throw new Error(json.error);
-    handleGraphResponse(json.graph, file.name);
-  } catch (err) {
-    hideLoading();
-    // If backend rejected, still show a helpful message about file format
-    if (err.message && err.message.includes('CSV')) {
-      showBanner('This file type may not be directly supported. Please convert to CSV for best results.', 'danger');
-    } else {
-      showBanner('Ingestion error: ' + err.message, 'danger');
+  const res  = await fetch(`${API}/upload`, { method: 'POST', body: form });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+  return json.graph;
+}
+
+// ── Ingest and analyse all uploaded files separately & correlate ──
+async function analyseUploadedFiles() {
+  if (!uploadedFiles.length) return;
+  const n = uploadedFiles.length;
+  showLoading(`Analysing ${n} evidence file${n > 1 ? 's' : ''}…`);
+
+  const errors = [];
+  for (const uf of uploadedFiles) {
+    if (uf.status !== 'analyzed' || !uf.graph) {
+      try {
+        const g = await uploadFile(uf.file);
+        uf.graph = g;
+        uf.status = 'analyzed';
+      } catch (err) {
+        errors.push(`${uf.name}: ${err.message}`);
+      }
     }
   }
+
+  hideLoading();
+
+  if (errors.length) {
+    showBanner(`Analysis warnings: ${errors.join('; ')}`, 'danger');
+  }
+
+  const validFiles = uploadedFiles.filter(f => f.graph && f.graph.nodes?.length);
+  if (!validFiles.length) {
+    showBanner('No entity nodes detected in the uploaded evidence files.', 'danger');
+    window.renderUploadedFiles?.();
+    return;
+  }
+
+  if (validFiles.length === 1) {
+    activeFileId = validFiles[0].id;
+    uploadedDataSource = { filename: validFiles[0].name, graph: validFiles[0].graph };
+    window.renderUploadedFiles?.();
+    updateSidebarState();
+    handleGraphResponse(validFiles[0].graph, validFiles[0].name);
+    showBanner(`Loaded repository: ${validFiles[0].name} (${validFiles[0].graph.nodes.length} entities)`, 'info');
+  } else {
+    await correlateUserFiles();
+  }
+}
+
+// ── Multi-file correlation for user uploaded files ──
+async function correlateUserFiles() {
+  if (!uploadedFiles.length) return;
+  showLoading(`Correlating ${uploadedFiles.length} investigative repositories…`);
+
+  try {
+    const form = new FormData();
+    uploadedFiles.forEach(uf => {
+      form.append('files', uf.file);
+    });
+    form.append('amount_threshold', 0);
+
+    const res = await fetch(`${API}/upload-multi`, { method: 'POST', body: form });
+    const json = await res.json();
+    hideLoading();
+
+    if (json.error) {
+      const graphs = uploadedFiles.map(f => f.graph).filter(Boolean);
+      if (graphs.length) {
+        const merged = mergeGraphs(graphs);
+        correlatedGraph = merged;
+        activeFileId = '__all__';
+        uploadedDataSource = { filename: 'Correlated Multi-Repository Network', graph: merged };
+        window.renderUploadedFiles?.();
+        updateSidebarState();
+        handleGraphResponse(merged, 'Correlated Multi-Repository Network');
+        return;
+      }
+      throw new Error(json.error);
+    }
+
+    correlatedGraph = json.graph;
+    activeFileId = '__all__';
+    const title = json.filename || `${uploadedFiles.length} Repositories Correlated`;
+    uploadedDataSource = { filename: title, graph: json.graph };
+    window.renderUploadedFiles?.();
+    updateSidebarState();
+    handleGraphResponse(json.graph, title);
+    showBanner(`Cross-repository correlation complete — ${json.graph.nodes.length} entities linked across ${uploadedFiles.length} sources.`, 'info');
+  } catch (err) {
+    hideLoading();
+    const graphs = uploadedFiles.map(f => f.graph).filter(Boolean);
+    if (graphs.length) {
+      const merged = mergeGraphs(graphs);
+      correlatedGraph = merged;
+      activeFileId = '__all__';
+      uploadedDataSource = { filename: 'Correlated Multi-Repository Network', graph: merged };
+      window.renderUploadedFiles?.();
+      updateSidebarState();
+      handleGraphResponse(merged, 'Correlated Multi-Repository Network');
+    } else {
+      showBanner('Correlation error: ' + err.message, 'danger');
+    }
+  }
+}
+
+// ── Merge multiple graph objects with proper multi-cluster separation ──
+function mergeGraphs(graphs) {
+  if (!graphs.length) return null;
+  if (graphs.length === 1) return graphs[0];
+
+  const nodeMap  = {};
+  const edgeKeys = new Set();
+  const edges    = [];
+
+  let clusterIdCounter = 0;
+
+  graphs.forEach(g => {
+    const localToGlobalCluster = {};
+    (g.clusters || []).forEach(c => {
+      localToGlobalCluster[c.id] = clusterIdCounter++;
+    });
+
+    (g.nodes || []).forEach(n => {
+      const assignedCluster = localToGlobalCluster[n.cluster] !== undefined
+        ? localToGlobalCluster[n.cluster]
+        : clusterIdCounter;
+
+      if (!nodeMap[n.id]) {
+        nodeMap[n.id] = { ...n, cluster: assignedCluster };
+      } else {
+        if (n.is_criminal)        nodeMap[n.id].is_criminal        = true;
+        if (n.has_stolen_vehicle) nodeMap[n.id].has_stolen_vehicle = true;
+        if (n.sources?.length) {
+          nodeMap[n.id].sources = [...new Set([
+            ...(nodeMap[n.id].sources || []), ...n.sources
+          ])];
+        }
+        if ((nodeMap[n.id].sources?.length || 0) > 1) nodeMap[n.id].multi_source = true;
+      }
+    });
+
+    (g.edges || []).forEach(e => {
+      const key  = `${e.source}|||${e.target}|||${e.type}`;
+      const rkey = `${e.target}|||${e.source}|||${e.type}`;
+      if (!edgeKeys.has(key) && !edgeKeys.has(rkey)) {
+        edgeKeys.add(key);
+        edges.push({ ...e });
+      }
+    });
+  });
+
+  const nodes = Object.values(nodeMap);
+
+  // Group into clusters
+  const clusterGroups = {};
+  nodes.forEach(n => {
+    clusterGroups[n.cluster] = clusterGroups[n.cluster] || [];
+    clusterGroups[n.cluster].push(n.id);
+  });
+
+  const numClusters = Object.keys(clusterGroups).length;
+  const CANVAS = 3000;
+  const cx = CANVAS / 2, cy = CANVAS / 2;
+  const OUTER_R = Math.max(450, Math.min(CANVAS * 0.38, 140 * numClusters));
+
+  // Compute non-overlapping cluster layout
+  const clusters = [];
+  Object.entries(clusterGroups).forEach(([cidStr, members], idx) => {
+    const cid = parseInt(cidStr, 10);
+    const n = members.length;
+    let ccx = cx, ccy = cy;
+    if (numClusters > 1) {
+      const angle = (2 * Math.PI * idx) / numClusters - Math.PI / 2;
+      ccx = cx + OUTER_R * Math.cos(angle);
+      ccy = cy + OUTER_R * Math.sin(angle);
+    }
+    const MIN_SPACING = 70;
+    const inner_r = n <= 1 ? 0 : Math.max(90, Math.floor((MIN_SPACING * n) / (2 * Math.PI)) + 40);
+
+    members.forEach((mId, mIdx) => {
+      if (nodeMap[mId]) {
+        if (n === 1) {
+          nodeMap[mId].x = ccx;
+          nodeMap[mId].y = ccy;
+        } else {
+          const a = (2 * Math.PI * mIdx) / n - Math.PI / 2;
+          nodeMap[mId].x = ccx + inner_r * Math.cos(a);
+          nodeMap[mId].y = ccy + inner_r * Math.sin(a);
+        }
+      }
+    });
+
+    clusters.push({
+      id: cid,
+      members,
+      size: n,
+      center: { x: ccx, y: ccy }
+    });
+  });
+
+  // Recompute degree
+  const deg = {};
+  nodes.forEach(n => { deg[n.id] = 0; });
+  edges.forEach(e => {
+    if (deg[e.source] !== undefined) deg[e.source]++;
+    if (deg[e.target] !== undefined) deg[e.target]++;
+  });
+  nodes.forEach(n => { n.degree = deg[n.id] || n.degree || 0; });
+
+  return {
+    nodes,
+    edges,
+    clusters,
+    stats: {
+      total_persons:  nodes.length,
+      total_edges:    edges.length,
+      total_clusters: clusters.length,
+    },
+  };
 }
 
 // ── Evidence Repositories List ─────────────────────────────────────────────────
@@ -151,7 +542,11 @@ async function loadSingleDemo(key, itemEl) {
     });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
+    uploadedDataSource = null;
+    correlatedGraph = null;
+    activeFileId = null;
     handleGraphResponse(json.graph, json.filename);
+    updateSidebarState();
   } catch (err) {
     hideLoading();
     showBanner('Correlation error: ' + err.message, 'danger');
@@ -159,6 +554,20 @@ async function loadSingleDemo(key, itemEl) {
 }
 
 async function loadAllFiles(suspectedOnly = false) {
+  // ── Case 1: User has uploaded files — correlate or isolate on user data ──
+  if (uploadedFiles.length > 0) {
+    if (!graphData || !graphData.nodes) {
+      await analyseUploadedFiles();
+    }
+    if (suspectedOnly) {
+      isolateSuspectSubnetsFromCurrentData();
+    } else {
+      await correlateUserFiles();
+    }
+    return;
+  }
+
+  // ── Case 2: No user files — use prototype demo datasets ──
   document.querySelectorAll('.dataset-item').forEach(e => e.classList.remove('active'));
   showLoading(suspectedOnly
     ? 'Isolating suspect subnets across evidence repositories…'
@@ -171,11 +580,52 @@ async function loadAllFiles(suspectedOnly = false) {
     });
     const json = await res.json();
     if (json.error) throw new Error(json.error);
+    uploadedDataSource = null;
+    correlatedGraph = null;
+    activeFileId = null;
     handleGraphResponse(json.graph, suspectedOnly ? 'Suspect Subnets (Correlated)' : 'Multi-Source Correlation');
+    updateSidebarState();
   } catch (err) {
     hideLoading();
     showBanner('Multi-source analysis error: ' + err.message, 'danger');
   }
+}
+
+// Filter the currently-loaded graph to criminals and their direct links,
+// without hitting the backend demo endpoint.
+function isolateSuspectSubnetsFromCurrentData() {
+  if (!graphData || !graphData.nodes) return;
+
+  const criminalIds = new Set(graphData.nodes.filter(n => n.is_criminal).map(n => n.id));
+  if (!criminalIds.size) {
+    showBanner('No persons of interest (POIs) found in the current dataset.', 'info');
+    return;
+  }
+
+  // Keep criminal nodes + civilians directly connected to a criminal
+  const suspectEdges = graphData.edges.filter(
+    e => criminalIds.has(e.source) || criminalIds.has(e.target)
+  );
+  const suspectNodeIds = new Set();
+  suspectEdges.forEach(e => { suspectNodeIds.add(e.source); suspectNodeIds.add(e.target); });
+  criminalIds.forEach(id => suspectNodeIds.add(id));
+
+  const filteredGraph = {
+    nodes:    graphData.nodes.filter(n => suspectNodeIds.has(n.id)),
+    edges:    suspectEdges,
+    clusters: graphData.clusters,
+    stats: {
+      total_persons:  suspectNodeIds.size,
+      total_edges:    suspectEdges.length,
+      total_clusters: graphData.stats.total_clusters,
+    },
+  };
+
+  renderGraph(filteredGraph, 'Suspect Subnets (Filtered)');
+  showBanner(
+    `SUSPECT SUBNETS ISOLATED — ${criminalIds.size} POIs · ${suspectEdges.length} direct links shown. Click “Clear Canvas” to restore full graph.`,
+    'info'
+  );
 }
 
 // ── Graph Response Handler ─────────────────────────────────────────────────────
@@ -198,35 +648,41 @@ function handleGraphResponse(graph, filename) {
 }
 
 // ── Operational Banner ─────────────────────────────────────────────────────────
-let _bannerTimer = null;
 function showBanner(text, type = 'info') {
   el.infoBannerTxt.textContent = text;
-  el.infoBanner.classList.remove('hidden', 'toast-out', 'toast-info', 'toast-danger', 'toast-warning', 'toast-success');
-  el.infoBanner.classList.add('toast-' + (type === 'danger' ? 'danger' : type));
-  clearTimeout(_bannerTimer);
-  _bannerTimer = setTimeout(hideBanner, 4000);
+  el.infoBanner.classList.remove('hidden');
+  el.infoBanner.style.borderColor = type === 'danger' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(59, 130, 246, 0.35)';
 }
 function hideBanner() {
-  el.infoBanner.classList.add('toast-out');
-  setTimeout(() => el.infoBanner.classList.add('hidden'), 250);
+  el.infoBanner.classList.add('hidden');
 }
 
 // ── Taxonomy Palette ───────────────────────────────────────────────────────────
-// ── Colour helpers (indigo/purple palette) ──────────────────────────────────────
 const EDGE_COLORS = {
-  'phone call':            '#34d399',
-  'shared bank account':   '#fde68a',
-  'financial transaction': '#fbbf24',
-  'vehicle transfer':      '#a78bfa',
-  'same criminal cluster': '#38bdf8',
-  'connected':             '#6366f1',
+  'phone call':            '#38bdf8',
+  'shared bank account':   '#eab308',
+  'financial transaction': '#10b981',
+  'vehicle transfer':      '#f97316',
+  'same criminal cluster': '#8b5cf6',
+  'connected':             '#64748b',
 };
+
 function edgeStroke(type, suspicious) {
-  if (suspicious) return '#f87171';
-  return EDGE_COLORS[type] || '#6366f1';
+  if (suspicious) return '#ef4444';
+  return EDGE_COLORS[type] || '#64748b';
 }
-function nodeFill(node)   { return node.is_criminal ? (node.has_stolen_vehicle ? '#3a2a55' : '#3a1f2e') : '#1e2a4a'; }
-function nodeStroke(node) { return node.is_criminal ? (node.has_stolen_vehicle ? '#a78bfa' : '#f87171') : '#60a5fa'; }
+
+function nodeFill(node) {
+  return node.is_criminal
+    ? (node.has_stolen_vehicle ? '#450a0a' : '#581c87' === '#581c87' ? '#7f1d1d' : '#7f1d1d')
+    : '#0c2444';
+}
+
+function nodeStroke(node) {
+  return node.is_criminal
+    ? (node.has_stolen_vehicle ? '#f97316' : '#ef4444')
+    : '#38bdf8';
+}
 
 function nodeR(node) {
   return 13 + Math.min(10, Math.sqrt(node.degree || 0) * 2.8);
@@ -263,10 +719,50 @@ function renderGraph(data, filename) {
   const BACKEND_CANVAS = 3000;
   const initScale = Math.min((W * 0.9) / BACKEND_CANVAS, (H * 0.9) / BACKEND_CANVAS);
 
+  // ── Edge capping: limit to 500 for performance on large datasets ────────
+  const MAX_EDGES = 500;
+  let allEdges = data.edges.slice();
+  let edgeCapped = false;
+  if (allEdges.length > MAX_EDGES) {
+    edgeCapped = true;
+    // Priority sort: suspicious > criminal-connected > financial > phone > other
+    const nodeCrimSet = new Set(data.nodes.filter(n => n.is_criminal).map(n => n.id));
+    function edgePriority(e) {
+      if (e.suspicious) return 4;
+      if (nodeCrimSet.has(e.source) || nodeCrimSet.has(e.target)) return 3;
+      if (e.type === 'financial transaction' || e.type === 'shared bank account') return 2;
+      if (e.type === 'phone call') return 1;
+      return 0;
+    }
+    allEdges.sort((a, b) => edgePriority(b) - edgePriority(a));
+    allEdges = allEdges.slice(0, MAX_EDGES);
+  }
+
   const nodes = data.nodes.map(n => ({ ...n }));
   const nodeMap = {};
   nodes.forEach(n => { nodeMap[n.id] = n; });
   activeNodeMap = nodeMap;
+
+  // ── Collision resolution for large graphs ───────────────────────────────
+  // Run a short D3 forceCollide pass on static positions to push apart overlapping nodes
+  if (nodes.length > 80) {
+    const simLinks = allEdges
+      .filter(e => nodeMap[e.source] && nodeMap[e.target])
+      .map(e => ({ source: e.source, target: e.target }));
+
+    const sim = d3.forceSimulation(nodes)
+      .force('collide', d3.forceCollide(d => nodeR(d) + 6).strength(0.85).iterations(3))
+      .force('link', d3.forceLink(simLinks).id(d => d.id).distance(80).strength(0.05))
+      .alphaDecay(0.18)
+      .stop();
+
+    // Run fixed number of ticks synchronously (fast, no visual flicker)
+    const ticks = Math.min(100, Math.ceil(Math.log(nodes.length) * 12));
+    for (let i = 0; i < ticks; i++) sim.tick();
+
+    // Write corrected positions back to nodeMap
+    nodes.forEach(n => { nodeMap[n.id] = n; });
+  }
 
   // SVG Layers
   svgSel   = d3.select('#graph-svg');
@@ -325,9 +821,17 @@ function renderGraph(data, filename) {
     });
   });
 
-  // Link Vectors
-  const edges = data.edges.filter(e => nodeMap[e.source] && nodeMap[e.target]);
+  // Link Vectors — use capped edge set
+  const edges = allEdges.filter(e => nodeMap[e.source] && nodeMap[e.target]);
   activeEdges = edges;
+
+  // Show banner if edges were capped
+  if (edgeCapped) {
+    showBanner(
+      `PERFORMANCE CAP: Showing ${edges.length} of ${data.edges.length} total links (highest-priority edges selected). Zoom in to explore clusters.`,
+      'info'
+    );
+  }
 
   gEdges.selectAll('.edge-line')
     .data(edges)
@@ -361,14 +865,13 @@ function renderGraph(data, filename) {
     .on('click', (ev, d) => { ev.stopPropagation(); onNodeClick(d, edges, nodeMap); });
 
   // Tactical Surveillance Indicator for Known Criminals / POIs
-    // Glow ring for criminals
   nodeSel.filter(d => d.is_criminal)
     .append('circle')
-    .attr('class', 'node-glow-ring')
-    .attr('r', d => nodeR(d) + 7)
+    .attr('r', d => nodeR(d) + 6)
     .attr('fill', 'none')
     .attr('stroke', d => nodeStroke(d))
     .attr('stroke-width', 1.2)
+    .attr('stroke-dasharray', '3, 2')
     .attr('opacity', 0.5)
     .attr('pointer-events', 'none');
 
@@ -1061,6 +1564,22 @@ function initButtons() {
     activeNodeMap     = null;
     activeEdges       = null;
     isolatedClusterId = null;
+    // Clear all user-data tracking
+    uploadedDataSource = null;
+    uploadedFiles = [];
+    activeFileId = null;
+    correlatedGraph = null;
+    window.renderUploadedFiles?.();
+    // Restore prototype section now that no user data is active
+    updateSidebarState();
+    // Reset prototype button text if needed
+    const protoBtn = $('btn-show-prototype');
+    if (protoBtn) {
+      const span = protoBtn.querySelector('span');
+      if (span) span.textContent = 'Show Prototype Data';
+      const list = $('dataset-list');
+      if (list) list.style.display = 'none';
+    }
     $('canvas-search-wrap')?.classList.add('hidden');
     $('search-dropdown')?.classList.add('hidden');
     const searchInput = $('node-search-input');

@@ -8,7 +8,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
   <link rel="stylesheet" href="style.css" />
@@ -40,15 +40,13 @@
             <polyline points="2 12 12 17 22 12" />
           </svg>
         </div>
-        <div class="brand-meta">
-          <span class="brand-name">CrimeNet AI</span>
-          <span class="brand-sub">SIH26189 — Criminal Network Analysis</span>
+        <div>
+          <div class="brand-line">
+            <span class="brand-name">CRIMENET</span>
+            <span class="sec-badge">LE SENSITIVE</span>
+          </div>
+          <span class="brand-sub">INVESTIGATIVE INTELLIGENCE WORKBENCH // REF: SIH-26189</span>
         </div>
-      </div>
-
-      <div class="status-pill" title="Backend connection status is informational only">
-        <span class="status-dot"></span>
-        <span class="status-text">System Online</span>
       </div>
 
       <!-- Active Graph Metrics -->
@@ -169,7 +167,7 @@
         <div class="section-header">
           <span class="section-title">EVIDENCE INGESTION</span>
         </div>
-        <div class="upload-zone" id="upload-zone">
+        <div class="upload-zone" id="upload-zone" style="cursor:pointer;" title="Click to browse or drop multiple files here">
           <div class="upload-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -177,14 +175,20 @@
               <line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
           </div>
-                    <p class="upload-text">Drop CSV or <label class="upload-link" for="file-input">browse</label></p>
-          <p class="upload-hint">Call records, bank data, vehicle data</p>
-          <input type="file" id="file-input" accept=".csv" style="display:none;" />
-          <div class="upload-filename" id="upload-filename">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            <span id="upload-filename-text"></span>
-          </div>
+          <p class="upload-text">Drop evidence files or <span class="upload-link">browse</span></p>
+          <p class="upload-hint">CSV, JSON, XLS, XLSX, TXT — multiple files supported</p>
+          <input type="file" id="file-input" accept=".csv,.json,.xls,.xlsx,.txt" multiple style="display:none;" />
         </div>
+        <!-- Staged / Uploaded Files List -->
+        <div class="file-queue" id="file-queue"></div>
+        <!-- Prominent Analyse Files Action Button -->
+        <button class="btn btn-emerald btn-block" id="btn-analyse-files" style="display:none;margin-top:8px;padding:8px 12px;font-size:12px;justify-content:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <span id="btn-analyse-text">Analyse Files</span>
+        </button>
       </section>
 
       <!-- Section: Multi-Source Correlation -->
@@ -212,8 +216,8 @@
         </p>
       </section>
 
-      <!-- Section: Evidence Datasets -->
-      <section class="sidebar-section">
+      <!-- Section: Evidence Datasets (Prototype) — shown only when no user files loaded -->
+      <section class="sidebar-section" id="prototype-section">
         <div class="section-header">
           <span class="section-title">PRIMARY EVIDENCE REPOSITORY</span>
         </div>
@@ -251,33 +255,20 @@
           </label>
         </div>
       </section>
-            <!-- Section: Correlation Legend & Isolation -->
+
+      <!-- Section: Taxonomy Legend -->
       <section class="sidebar-section" id="legend-section" style="display:none;">
         <div class="section-header">
-          <span class="section-title">TAXONOMY LEGEND</span>
+          <span class="section-title">TAXONOMY &amp; LEGEND</span>
         </div>
-        <div class="legend-grid">
-          <div class="legend-item" data-filter-type="criminal">
-            <div class="legend-dot criminal"></div><span>Known POI</span><span class="legend-count" id="count-poi">0</span>
-          </div>
-          <div class="legend-item" data-filter-type="civilian">
-            <div class="legend-dot civilian"></div><span>Civilian</span><span class="legend-count" id="count-civ">0</span>
-          </div>
-          <div class="legend-item" data-filter-type="stolen">
-            <div class="legend-dot stolen"></div><span>Stolen Asset</span><span class="legend-count" id="count-stolen">0</span>
-          </div>
-          <div class="legend-item" data-filter-type="phone">
-            <div class="legend-line phone"></div><span>Phone Call</span><span class="legend-count" id="count-phone">0</span>
-          </div>
-          <div class="legend-item" data-filter-type="financial">
-            <div class="legend-line financial"></div><span>Financial</span><span class="legend-count" id="count-financial">0</span>
-          </div>
-          <div class="legend-item" data-filter-type="vehicle">
-            <div class="legend-line vehicle"></div><span>Vehicle Transfer</span><span class="legend-count" id="count-vehicle">0</span>
-          </div>
-          <div class="legend-item" data-filter-type="suspicious">
-            <div class="legend-line suspicious"></div><span>Suspicious</span><span class="legend-count" id="count-suspicious">0</span>
-          </div>
+        <div class="legend-grid" id="legend-grid">
+          <div class="legend-item" data-filter-type="criminal" title="Isolate Priority POIs"><div class="legend-dot criminal"></div><span>Priority POI</span><span class="legend-count" id="count-poi">0</span></div>
+          <div class="legend-item" data-filter-type="civilian" title="Isolate Civilians / Associates"><div class="legend-dot civilian"></div><span>Civilian / Associate</span><span class="legend-count" id="count-civ">0</span></div>
+          <div class="legend-item" data-filter-type="stolen" title="Isolate Stolen Asset Links"><div class="legend-dot stolen"></div><span>Stolen Asset Link</span><span class="legend-count" id="count-stolen">0</span></div>
+          <div class="legend-item" data-filter-type="phone" title="Isolate Telephony Calls"><div class="legend-line phone"></div><span>Telephony Call</span><span class="legend-count" id="count-phone">0</span></div>
+          <div class="legend-item" data-filter-type="financial" title="Isolate Financial Wires"><div class="legend-line financial"></div><span>Financial Wire</span><span class="legend-count" id="count-financial">0</span></div>
+          <div class="legend-item" data-filter-type="vehicle" title="Isolate Vehicle Transfers"><div class="legend-line vehicle"></div><span>Vehicle Transfer</span><span class="legend-count" id="count-vehicle">0</span></div>
+          <div class="legend-item" data-filter-type="suspicious" title="Isolate Flagged Suspicious Links"><div class="legend-line suspicious"></div><span>Flagged Suspicious</span><span class="legend-count" id="count-suspicious">0</span></div>
         </div>
       </section>
 
@@ -335,7 +326,6 @@
         <button class="zoom-btn" id="zoom-in" title="Zoom In">+</button>
         <button class="zoom-btn" id="zoom-fit" title="Fit to Workspace">⊡</button>
         <button class="zoom-btn" id="zoom-out" title="Zoom Out">−</button>
-        
         <div style="height:1px;background:var(--border);margin:2px 0;"></div>
         <button class="zoom-btn" id="btn-export-png" title="Export Evidence Capture (PNG)">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

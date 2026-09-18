@@ -51,3 +51,6 @@ npm-debug.log*
 
 # Large data files (optional - remove if you want to include them)
 *.zip
+
+.vercel
+.env*

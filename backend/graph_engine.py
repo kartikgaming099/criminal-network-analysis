@@ -356,7 +356,7 @@ def build_graph_from_csv(csv_text: str, filename: str = '',
 def build_combined_graph(file_dict: dict, amount_threshold: float = 0,
                          suspected_only: bool = False) -> dict:
     """
-    file_dict: {schema_key: csv_text_string}
+    file_dict: {filename_or_key: csv_text_string}
     All files share the same graph — persons matching by name are auto-merged.
     Cross-file links emerge naturally (same person node gains data from each file).
     """
@@ -372,19 +372,36 @@ def build_combined_graph(file_dict: dict, amount_threshold: float = 0,
     ]
 
     loaded_schemas = []
-    for schema in ORDER:
-        csv_text = file_dict.get(schema)
-        if not csv_text:
-            continue
-        df = pd.read_csv(StringIO(csv_text))
-        df.columns = df.columns.str.strip()
-        _dispatch(schema, df, G, persons, amount_threshold)
-        loaded_schemas.append(schema)
+    processed_keys = set()
 
-    result = _finalise(G, persons, '+'.join(loaded_schemas))
+    # Process predefined order if present
+    for schema in ORDER:
+        if schema in file_dict:
+            csv_text = file_dict[schema]
+            processed_keys.add(schema)
+            if not csv_text:
+                continue
+            df = pd.read_csv(StringIO(csv_text))
+            df.columns = df.columns.str.strip()
+            _dispatch(schema, df, G, persons, amount_threshold)
+            loaded_schemas.append(schema)
+
+    # Process any other uploaded files
+    for key, csv_text in file_dict.items():
+        if key in processed_keys or not csv_text:
+            continue
+        try:
+            df = pd.read_csv(StringIO(csv_text))
+            df.columns = df.columns.str.strip()
+            schema = detect_schema(df)
+            _dispatch(schema, df, G, persons, amount_threshold)
+            loaded_schemas.append(schema if schema != 'generic' else key)
+        except Exception as e:
+            print(f"Error processing {key}: {e}")
+
+    result = _finalise(G, persons, '+'.join(loaded_schemas) if loaded_schemas else 'multi_upload')
 
     # Add cross-file flag to persons that appear in multiple sources
-    nodeMap = {n['id']: n for n in result['nodes']}
     for n in result['nodes']:
         sources = n.get('sources', [])
         n['multi_source'] = len(sources) > 1
