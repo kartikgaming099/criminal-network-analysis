@@ -106,8 +106,8 @@ function initUpload() {
           ? `${nodeCount} entities · ${edgeCount} links · ${f.sizeKb} KB`
           : `${f.sizeKb} KB · Ready to analyse`;
         const badge = isAnalyzed
-          ? `<span class="uploaded-file-badge" style="color:#10b981;background:rgba(16,185,129,0.15);padding:1px 6px;border-radius:2px;font-size:8.5px;font-family:var(--font-mono);font-weight:700;">READY</span>`
-          : `<span class="uploaded-file-badge" style="color:#eab308;background:rgba(234,179,8,0.15);padding:1px 6px;border-radius:2px;font-size:8.5px;font-family:var(--font-mono);font-weight:700;">STAGED</span>`;
+          ? `<span class="uploaded-file-badge uploaded-file-badge--ready">READY</span>`
+          : `<span class="uploaded-file-badge uploaded-file-badge--staged">STAGED</span>`;
 
         return `
           <div class="file-queue-item ${isActive ? 'active' : ''}" onclick="selectUploadedFile('${f.id}')" title="Click to view this file network on canvas">
@@ -115,7 +115,7 @@ function initUpload() {
               <div class="file-queue-name">${escapeHtml(f.name)}</div>
               <div class="file-queue-meta">${meta}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;">
+            <div class="file-queue-actions">
               ${badge}
               <button class="file-queue-remove" title="Remove ${escapeHtml(f.name)}" onclick="event.stopPropagation(); removeUploadedFile('${f.id}')">&#x2715;</button>
             </div>
