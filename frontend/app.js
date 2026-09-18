@@ -1160,6 +1160,11 @@ function initButtons() {
       if (!d.is_criminal && !showCiv) return 'none';
       return null;
     });
+    d3.selectAll('.node-label').attr('display', d => {
+      if (d.is_criminal && !showCrim) return 'none';
+      if (!d.is_criminal && !showCiv) return 'none';
+      return null;
+    });
     d3.selectAll('.edge-line').attr('display', d => {
       if (d.suspicious && !showSusp) return 'none';
       return null;
